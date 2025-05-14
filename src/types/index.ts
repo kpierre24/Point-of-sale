@@ -4,10 +4,12 @@ export interface Product {
   id: string;
   name: string;
   description?: string;
-  price: number;
+  price: number; // Selling price
+  costOfGoodsSold?: number; // Cost to produce/acquire
   stockQuantity: number;
   category?: string;
   imageUrl?: string; // Placeholder for product image
+  recipeId?: string; // Optional link to a BuiltProductRecipe
 }
 
 export interface Customer {
@@ -62,4 +64,21 @@ export interface ProductSuggestion {
 export interface ProductAttributeSuggestion {
   description: string;
   category: string;
+}
+
+// Represents a recipe or build configuration for a product
+export interface BuiltProductRecipe {
+  id: string;
+  name: string; // Name of the recipe, e.g., "Deluxe Burger Recipe"
+  
+  // Simplified costs for this iteration
+  totalIngredientsCost: number;
+  totalLabourCost: number;
+  totalPackagingCost: number;
+  
+  totalCalculatedCost: number; // Will be sum of the above three, calculated automatically
+  
+  notes?: string;
+  outputProductName?: string; // Suggested name for the final product if different from recipe name
+  outputProductDescription?: string; // Suggested description for the final product
 }

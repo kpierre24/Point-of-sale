@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import type { Product } from '@/types';
+import type { Product, BuiltProductRecipe } from '@/types'; // Added BuiltProductRecipe
 import { Button } from '@/components/ui/button';
 import { ProductForm } from '@/components/ProductForm';
 import {
@@ -34,6 +34,7 @@ import {
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [availableRecipes, setAvailableRecipes] = useState<BuiltProductRecipe[]>([]); // For ProductForm
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -49,6 +50,16 @@ export default function ProductsPage() {
         console.error("Failed to parse products from localStorage", e);
         setProducts([]);
       }
+    }
+    // Load recipes for the ProductForm's "Load from Recipe" feature
+    const storedRecipes = localStorage.getItem('builtProductRecipes');
+    if (storedRecipes) {
+        try {
+            setAvailableRecipes(JSON.parse(storedRecipes));
+        } catch (e) {
+            console.error("Failed to parse recipes from localStorage", e);
+            setAvailableRecipes([]);
+        }
     }
   }, []);
 
@@ -91,7 +102,8 @@ export default function ProductsPage() {
     toast({ title: 'Product Deleted', description: 'The product has been removed from your inventory.', variant: 'destructive' });
   };
   
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number | undefined) => {
+    if (typeof amount !== 'number') return 'N/A';
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
 
@@ -115,6 +127,7 @@ export default function ProductsPage() {
         onOpenChange={setIsFormOpen}
         onSave={handleSaveProduct}
         productToEdit={productToEdit}
+        availableRecipes={availableRecipes} // Pass recipes to form
       />
 
       <Card>
@@ -133,7 +146,8 @@ export default function ProductsPage() {
                   <TableHead className="w-[80px]">Image</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead className="text-right">Price</TableHead>
+                  <TableHead className="text-right">Cost Price</TableHead>
+                  <TableHead className="text-right">Selling Price</TableHead>
                   <TableHead className="text-right">Stock</TableHead>
                   <TableHead className="text-center w-[120px]">Actions</TableHead>
                 </TableRow>
@@ -159,6 +173,7 @@ export default function ProductsPage() {
                     </TableCell>
                     <TableCell className="font-medium">{product.name}</TableCell>
                     <TableCell>{product.category || 'N/A'}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(product.costOfGoodsSold)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(product.price)}</TableCell>
                     <TableCell className="text-right">{product.stockQuantity}</TableCell>
                     <TableCell className="text-center">

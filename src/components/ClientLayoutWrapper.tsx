@@ -21,6 +21,7 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Package,
+  ClipboardList, // Added for Recipes
   Truck,
   Users,
   UserCog,
@@ -40,6 +41,7 @@ const navItems: NavItem[] = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', tooltip: 'Dashboard Overview' },
   { href: '/sales', icon: ShoppingCart, label: 'Sales', tooltip: 'Record and View Sales' },
   { href: '/products', icon: Package, label: 'Products', tooltip: 'Manage Products' },
+  { href: '/recipes', icon: ClipboardList, label: 'Recipes', tooltip: 'Manage Product Recipes/Builds' },
   { href: '/purchases', icon: Truck, label: 'Purchases', tooltip: 'Manage Stock Purchases' },
   { href: '/customers', icon: Users, label: 'Customers', tooltip: 'Manage Customers' },
   { href: '/users', icon: UserCog, label: 'Staff', tooltip: 'Manage Staff Users' },
