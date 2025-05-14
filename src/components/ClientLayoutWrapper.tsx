@@ -21,12 +21,13 @@ import {
   LayoutDashboard,
   ShoppingCart,
   Package,
-  ClipboardList, // Added for Recipes
+  ClipboardList, 
   Truck,
   Users,
   UserCog,
-  Settings as SettingsIcon, // Renamed to avoid conflict
+  Settings as SettingsIcon, 
   Home,
+  FileText, // Added for Reports
 } from 'lucide-react';
 import { Button } from './ui/button';
 
@@ -44,6 +45,7 @@ const navItems: NavItem[] = [
   { href: '/recipes', icon: ClipboardList, label: 'Recipes', tooltip: 'Manage Product Recipes/Builds' },
   { href: '/purchases', icon: Truck, label: 'Purchases', tooltip: 'Manage Stock Purchases' },
   { href: '/customers', icon: Users, label: 'Customers', tooltip: 'Manage Customers' },
+  { href: '/reports', icon: FileText, label: 'Reports', tooltip: 'View Business Reports' },
   { href: '/users', icon: UserCog, label: 'Staff', tooltip: 'Manage Staff Users' },
 ];
 
