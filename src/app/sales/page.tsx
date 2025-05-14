@@ -2,12 +2,12 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import type { SoldProduct, Product, User } from "@/types"; // Added Product and User type
+import type { SoldProduct, Product } from "@/types"; 
 import { SaleForm } from "@/components/SaleForm";
 import { SalesHistoryTable } from "@/components/SalesHistoryTable";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { History, Printer } from "lucide-react";
-import { Receipt } from "@/components/Receipt"; // Import Receipt component
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { History, Printer, Loader2 } from "lucide-react";
+import { Receipt } from "@/components/Receipt"; 
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,24 +16,26 @@ import {
   DialogTitle,
   DialogFooter,
   DialogClose,
-  DialogDescription,
+  DialogDescription as ReceiptDialogDescription, // Renamed to avoid conflict with CardDescription
 } from "@/components/ui/dialog";
 import { useReactToPrint } from 'react-to-print';
 import { useToast } from "@/hooks/use-toast";
-import { DUMMY_CURRENT_USER_ID_FOR_SALES } from "@/config/constants"; // Placeholder for current user ID
+import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
 
 export default function SalesPage() {
   const [soldItems, setSoldItems] = useState<SoldProduct[]>([]);
-  const [products, setProducts] = useState<Product[]>([]); // State for products
-  const [currentStaff, setCurrentStaff] = useState<User | null>(null); // State for current staff
+  const [products, setProducts] = useState<Product[]>([]); 
   const [isMounted, setIsMounted] = useState(false);
   const [receiptData, setReceiptData] = useState<SoldProduct | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const receiptComponentRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { currentUser, currentUserProfile, loading: authLoading } = useAuth(); // Get current user from AuthContext
 
   useEffect(() => {
     setIsMounted(true);
+    if (authLoading) return; // Wait for auth to load
+
     const savedSoldItems = localStorage.getItem("soldItems");
     if (savedSoldItems) {
       try {
@@ -52,50 +54,34 @@ export default function SalesPage() {
         setProducts([]);
       }
     }
-    const storedUsers = localStorage.getItem('staffUsers');
-    if (storedUsers) {
-      try {
-        const users: User[] = JSON.parse(storedUsers);
-        // Attempt to find a "current" user for sales attribution.
-        // This is a placeholder. In a real app, this would come from an auth context.
-        const currentUser = users.find(u => u.id === DUMMY_CURRENT_USER_ID_FOR_SALES && u.isActive);
-        if (currentUser) {
-            setCurrentStaff(currentUser);
-        } else {
-            // Fallback: if no specific dummy user, or dummy is inactive, pick first active admin or first active user.
-             const firstActiveAdmin = users.find(u => u.role === 'Admin' && u.isActive);
-             if(firstActiveAdmin) setCurrentStaff(firstActiveAdmin);
-             else setCurrentStaff(users.find(u => u.isActive) || null);
-        }
-      } catch (e) {
-        console.error("Failed to parse staffUsers from localStorage", e);
-      }
-    }
-  }, []);
+  }, [authLoading]);
 
   useEffect(() => {
-    if (isMounted) {
+    if (isMounted && !authLoading) {
       localStorage.setItem("soldItems", JSON.stringify(soldItems));
     }
-  }, [soldItems, isMounted]);
+  }, [soldItems, isMounted, authLoading]);
 
   useEffect(() => {
-    if (isMounted) {
+    if (isMounted && !authLoading) {
       localStorage.setItem("products", JSON.stringify(products));
     }
-  }, [products, isMounted]);
+  }, [products, isMounted, authLoading]);
 
-  const handleRecordSale = (newSaleData: Omit<SoldProduct, "id" | "timestamp">) => {
+  const handleRecordSale = (newSaleData: Omit<SoldProduct, "id" | "timestamp" | "staffId" | "staffName">) => {
+    if (!currentUser || !currentUserProfile) {
+        toast({ title: "Error", description: "No authenticated user found. Please log in.", variant: "destructive" });
+        return;
+    }
     const newSale: SoldProduct = {
       ...newSaleData,
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
-      staffId: currentStaff?.id, // Add staffId
-      staffName: currentStaff?.name, // Add staffName
+      staffId: currentUser.uid, 
+      staffName: currentUserProfile.name, 
     };
     setSoldItems((prevItems) => [newSale, ...prevItems]);
 
-    // If a product was sold from inventory, update its stock
     if (newSale.productId) {
       setProducts(prevProducts => 
         prevProducts.map(p => 
@@ -107,7 +93,7 @@ export default function SalesPage() {
     }
     setReceiptData(newSale);
     setIsReceiptModalOpen(true);
-    toast({ title: "Sale Recorded", description: `${newSale.name} (x${newSale.quantity}) by ${currentStaff?.name || 'Staff'} added to history.` });
+    toast({ title: "Sale Recorded", description: `${newSale.name} (x${newSale.quantity}) by ${currentUserProfile.name} added to history.` });
   };
   
   const recentItemsForAI = soldItems.slice(0, 10).map(item => ({ name: item.name, price: item.price }));
@@ -119,13 +105,37 @@ export default function SalesPage() {
     onPrintError: () => toast({title: "Print Error", description: "Could not print receipt.", variant: "destructive"}),
   });
 
+  if (authLoading || !isMounted) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-150px)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-4 text-lg">Loading Sales...</p>
+      </div>
+    );
+  }
+  
+  if (!currentUser) {
+    return (
+         <Card>
+            <CardHeader>
+                <CardTitle>Access Denied</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <p>You must be logged in to access the sales page. Please log in.</p>
+                 {/* Optionally, redirect or show login button */}
+            </CardContent>
+        </Card>
+    );
+  }
+
+
   return (
     <div className="space-y-8">
         <header className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight">Sales Management</h1>
-          <p className="text-muted-foreground text-md">
-            Record new sales and view sales history. Current User: {currentStaff?.name || "Not Logged In"}
-          </p>
+          <CardDescription className="text-muted-foreground text-md"> {/* Changed p to CardDescription */}
+            Record new sales and view sales history. Current User: {currentUserProfile?.name || "Loading..."} ({currentUserProfile?.role || ''})
+          </CardDescription>
         </header>
 
         <main>
@@ -135,8 +145,8 @@ export default function SalesPage() {
                 onRecordSale={handleRecordSale} 
                 soldItemsForAISuggestion={isMounted ? recentItemsForAI : []}
                 availableProducts={isMounted ? products : []}
-                currentStaffId={currentStaff?.id}
-                currentStaffName={currentStaff?.name}
+                currentStaffId={currentUser.uid} // Pass Firebase UID
+                currentStaffName={currentUserProfile?.name} // Pass profile name
               />
             </div>
             <div className="lg:col-span-3">
@@ -160,9 +170,9 @@ export default function SalesPage() {
             <DialogContent className="sm:max-w-md printable-receipt">
               <DialogHeader>
                 <DialogTitle>Sale Receipt</DialogTitle>
-                <DialogDescription className="no-print">
+                <ReceiptDialogDescription className="no-print"> {/* Use Renamed component */}
                   Review the details of the sale. Click print to get a hard copy.
-                </DialogDescription>
+                </ReceiptDialogDescription>
               </DialogHeader>
               
               <Receipt ref={receiptComponentRef} sale={receiptData} />

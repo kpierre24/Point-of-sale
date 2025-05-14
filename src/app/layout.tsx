@@ -1,11 +1,10 @@
 import type { Metadata } from 'next';
 import { GeistSans } from 'geist/font/sans';
-// Removed GeistMono import as it was causing an error and not explicitly used.
-// If mono font is needed later, ensure 'geist/font/mono' is correctly installed/pathed.
 import './globals.css';
 import { APP_TITLE } from '@/config/constants';
 import { Toaster } from '@/components/ui/toaster';
-import { ClientLayoutWrapper } from '@/components/ClientLayoutWrapper'; // Import the wrapper
+import { ClientLayoutWrapper } from '@/components/ClientLayoutWrapper';
+import { AuthProvider } from '@/contexts/AuthContext'; // Import AuthProvider
 
 export const metadata: Metadata = {
   title: APP_TITLE,
@@ -20,9 +19,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${GeistSans.variable}`}>
       <body className={`font-sans antialiased`}>
-        <ClientLayoutWrapper>
-          {children}
-        </ClientLayoutWrapper>
+        <AuthProvider> {/* Wrap with AuthProvider */}
+          <ClientLayoutWrapper>
+            {children}
+          </ClientLayoutWrapper>
+        </AuthProvider>
         <Toaster />
       </body>
     </html>

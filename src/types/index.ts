@@ -43,13 +43,15 @@ export interface PurchaseOrder {
 export const USER_ROLES = ['Admin', 'Manager', 'Cashier', 'Staff'] as const;
 export type UserRole = typeof USER_ROLES[number];
 
+// Represents the custom user profile stored in Firestore
 export interface User {
-  id: string;
+  id: string; // This will be the Firebase Auth UID
   name: string;
-  email: string;
+  email: string; // Firebase Auth email
   role: UserRole;
   isActive: boolean;
-  password?: string; // Plain text for client-side example. NOT FOR PRODUCTION.
+  pin?: string; // 6-digit PIN for login, optional
+  // Password is not stored here; Firebase Auth handles it securely.
 }
 
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
@@ -66,7 +68,7 @@ export interface SoldProduct {
   productId?: string; 
   customerId?: string; 
   paymentMethod: PaymentMethod;
-  staffId?: string; // ID of the staff member who made the sale
+  staffId?: string; // ID of the staff member (Firebase UID)
   staffName?: string; // Name of the staff member (optional, for convenience)
 }
 
