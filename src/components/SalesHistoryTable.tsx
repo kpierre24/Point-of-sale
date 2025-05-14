@@ -1,3 +1,4 @@
+// src/components/SalesHistoryTable.tsx
 "use client";
 
 import type { SoldProduct } from "@/types";
@@ -34,6 +35,7 @@ export function SalesHistoryTable({ soldItems }: SalesHistoryTableProps) {
             <TableHead className="text-right">Unit Price</TableHead>
             <TableHead className="text-right">Subtotal</TableHead>
             <TableHead className="text-right">Tax</TableHead>
+            <TableHead>Payment</TableHead> {/* Added Payment Method Column */}
             <TableHead className="text-right">Total</TableHead>
           </TableRow>
         </TableHeader>
@@ -46,6 +48,7 @@ export function SalesHistoryTable({ soldItems }: SalesHistoryTableProps) {
               <TableCell className="text-right">{formatCurrency(item.price)}</TableCell>
               <TableCell className="text-right">{formatCurrency(item.subtotal)}</TableCell>
               <TableCell className="text-right">{formatCurrency(item.taxAmount)}</TableCell>
+              <TableCell>{item.paymentMethod}</TableCell> {/* Display Payment Method */}
               <TableCell className="text-right font-semibold">{formatCurrency(item.total)}</TableCell>
             </TableRow>
           ))}
