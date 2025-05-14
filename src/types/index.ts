@@ -20,16 +20,27 @@ export interface Customer {
   address?: string;
 }
 
-export interface Purchase {
-  id: string;
-  productId: string;
-  productName?: string; // Denormalized for easy display
+// Renamed from Purchase to PurchaseOrderItem as it represents an item in a PurchaseOrder
+export interface PurchaseOrderItem {
+  id: string; // Unique ID for the line item itself, if needed for React keys or direct manipulation
+  productId: string; 
+  productName: string; // Denormalized product name at the time of purchase
   quantity: number;
   costPerItem: number;
-  totalCost: number;
-  supplier?: string;
-  timestamp: string;
+  totalCost: number; // quantity * costPerItem
 }
+
+export interface PurchaseOrder {
+  id: string; // Unique ID for the purchase order
+  supplierName: string; // For simplicity, not a full Supplier object yet
+  orderDate: string; // ISO string
+  receivedDate?: string; // ISO string, set when status becomes 'Received'
+  status: 'Pending' | 'Received' | 'Cancelled';
+  items: PurchaseOrderItem[];
+  grandTotal: number; // Sum of totalCost for all items
+  notes?: string;
+}
+
 
 export interface User {
   id: string;
@@ -82,3 +93,4 @@ export interface BuiltProductRecipe {
   outputProductName?: string; // Suggested name for the final product if different from recipe name
   outputProductDescription?: string; // Suggested description for the final product
 }
+
