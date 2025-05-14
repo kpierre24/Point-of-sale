@@ -1,7 +1,7 @@
 // src/components/Receipt.tsx
 "use client";
 
-import type React from 'react';
+import React from 'react'; // Changed from type import to regular import
 import type { SoldProduct } from '@/types';
 import { APP_TITLE } from '@/config/constants';
 import { format } from 'date-fns';
