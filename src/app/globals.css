@@ -112,3 +112,53 @@ body {
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+    -webkit-print-color-adjust: exact !important; /* Chrome, Safari */
+    color-adjust: exact !important; /* Firefox */
+  }
+  .printable-receipt, .printable-receipt * {
+    visibility: visible;
+  }
+  .printable-receipt-content, .printable-receipt-content * {
+    visibility: visible;
+  }
+  .printable-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: auto;
+    margin: 0;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+    background-color: white !important; /* Ensure background is white for printing */
+    color: black !important; /* Ensure text is black for printing */
+  }
+  .printable-receipt-content {
+     background-color: white !important;
+     color: black !important;
+     border: 1px solid #ccc; /* Optional: add a border for receipt appearance */
+     padding: 20px; /* Adjust padding as needed */
+     margin: 0 auto; /* Center receipt on page */
+     max-width: 300px; /* Typical receipt width */
+  }
+  .no-print, .no-print * {
+    display: none !important;
+  }
+   /* Ensure dialog content doesn't inherit strange print styles */
+  .printable-receipt .dialog-content-class { /* Replace with actual class if needed */
+    overflow: visible !important; /* Ensure all content is visible */
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Force specific font for print if needed */
+  .printable-receipt, .printable-receipt * {
+    font-family: 'Courier New', Courier, monospace !important; /* Example: Monospaced font for receipts */
+    font-size: 10pt !important; /* Adjust font size for readability */
+  }
+}
