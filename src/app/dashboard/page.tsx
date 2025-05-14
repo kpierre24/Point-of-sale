@@ -3,16 +3,17 @@
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { BarChart, DollarSign, Package, Users, UserCircle, Loader2 } from "lucide-react";
-import { useAuth } from '@/contexts/AuthContext';
+import { Button } from "@/components/ui/button"; // Added Button import
+import { BarChart, DollarSign, Package, Users, Loader2 } from "lucide-react";
 import type { Product, Customer, SoldProduct } from '@/types';
+import { useRouter } from 'next/navigation'; // Added useRouter import
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 };
 
 export default function DashboardPage() {
-  const { currentUser, currentUserProfile, loading: authLoading } = useAuth();
+  const router = useRouter(); // Initialize router
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [totalSalesCount, setTotalSalesCount] = useState(0);
   const [productsInStock, setProductsInStock] = useState(0);
@@ -20,10 +21,7 @@ export default function DashboardPage() {
   const [isDataLoading, setIsDataLoading] = useState(true);
 
   useEffect(() => {
-    if (authLoading) return; // Wait for auth state to resolve
-
     setIsDataLoading(true);
-    // Fetch data from localStorage (or ideally Firestore/backend in a real app)
     const storedSales = localStorage.getItem('soldItems');
     const storedProducts = localStorage.getItem('products');
     const storedCustomers = localStorage.getItem('customers');
@@ -35,7 +33,7 @@ export default function DashboardPage() {
         const sales: SoldProduct[] = JSON.parse(storedSales);
         sales.forEach(sale => {
           revenue += sale.total;
-          salesCount += 1; // Assuming each SoldProduct entry is one transaction unit for this count
+          salesCount += 1; 
         });
       } catch (e) { console.error("Failed to parse sales for dashboard", e); }
     }
@@ -46,8 +44,6 @@ export default function DashboardPage() {
     if (storedProducts) {
       try {
         const products: Product[] = JSON.parse(storedProducts);
-        // Sum of stock quantities for all products or count of unique products
-        // For "Products in Stock" card, it usually means count of unique product types available
         stockCount = products.filter(p => p.stockQuantity > 0).length; 
       } catch (e) { console.error("Failed to parse products for dashboard", e); }
     }
@@ -62,9 +58,9 @@ export default function DashboardPage() {
     }
     setCustomerCount(custCount);
     setIsDataLoading(false);
-  }, [authLoading]);
+  }, []);
 
-  if (authLoading || isDataLoading) {
+  if (isDataLoading) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-150px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -78,7 +74,7 @@ export default function DashboardPage() {
       <header className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground text-md">
-          Welcome, {currentUserProfile?.name || currentUser?.email || 'User'}! Here's an overview of your business activity.
+          Welcome! Here's an overview of your business activity.
         </p>
       </header>
 
@@ -140,7 +136,6 @@ export default function DashboardPage() {
             <CardDescription>Overview of recent sales and stock movements.</CardDescription>
           </CardHeader>
           <CardContent>
-            {/* Placeholder for recent activity feed or chart */}
             <p className="text-muted-foreground">Recent activity feed coming soon.</p>
           </CardContent>
         </Card>
@@ -163,7 +158,7 @@ export default function DashboardPage() {
             <CardTitle>Advanced Analytics</CardTitle>
         </CardHeader>
         <CardContent>
-            <p className="text-muted-foreground">More detailed reports, charts, and sales forecasting will be available here. Data for dashboard cards is currently sourced from local storage for demonstration and will be integrated with a backend/database in a full application.</p>
+            <p className="text-muted-foreground">More detailed reports, charts, and sales forecasting will be available here. Data for dashboard cards is currently sourced from local storage for demonstration.</p>
         </CardContent>
        </Card>
     </div>

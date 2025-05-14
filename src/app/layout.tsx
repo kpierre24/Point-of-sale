@@ -4,7 +4,6 @@ import './globals.css';
 import { APP_TITLE } from '@/config/constants';
 import { Toaster } from '@/components/ui/toaster';
 import { ClientLayoutWrapper } from '@/components/ClientLayoutWrapper';
-import { AuthProvider } from '@/contexts/AuthContext'; // Import AuthProvider
 
 export const metadata: Metadata = {
   title: APP_TITLE,
@@ -19,11 +18,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${GeistSans.variable}`}>
       <body className={`font-sans antialiased`}>
-        <AuthProvider> {/* Wrap with AuthProvider */}
-          <ClientLayoutWrapper>
-            {children}
-          </ClientLayoutWrapper>
-        </AuthProvider>
+        {/* AuthProvider removed */}
+        <ClientLayoutWrapper>
+          {children}
+        </ClientLayoutWrapper>
         <Toaster />
       </body>
     </html>

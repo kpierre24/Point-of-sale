@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import type { User as AppUser, UserRole } from '@/types'; // Renamed
+import type { User as AppUser, UserRole } from '@/types'; 
 import { USER_ROLES } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,25 +31,20 @@ import { KeyRound } from 'lucide-react';
 interface UserFormProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSave: (user: AppUser, password?: string) => void; // Password only for new user creation
+  onSave: (user: AppUser) => void; 
   userToEdit?: AppUser | null;
-  isEditingCurrentUser?: boolean;
-  currentUserRole?: UserRole;
 }
 
-// Default excluding id and pin, as pin is auto-generated or handled separately
 const defaultUserBase: Omit<AppUser, 'id' | 'pin' > = {
   name: '',
   email: '',
-  role: 'Staff', // Sensible default
+  role: 'Staff', 
   isActive: true,
 };
 
-export function UserForm({ isOpen, onOpenChange, onSave, userToEdit, isEditingCurrentUser = false, currentUserRole }: UserFormProps) {
+export function UserForm({ isOpen, onOpenChange, onSave, userToEdit }: UserFormProps) {
   const [user, setUser] = useState<Omit<AppUser, 'id'>>(defaultUserBase);
-  const [pin, setPin] = useState(''); // For displaying/editing PIN
-  const [password, setPassword] = useState(''); // Only for new user creation
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [pin, setPin] = useState(''); 
   const { toast } = useToast();
 
   useEffect(() => {
@@ -59,15 +54,12 @@ export function UserForm({ isOpen, onOpenChange, onSave, userToEdit, isEditingCu
           email: userToEdit.email,
           role: userToEdit.role,
           isActive: userToEdit.isActive,
-          // Pin is handled separately for display
       });
-      setPin(userToEdit.pin || ''); // Show existing PIN or empty if none
+      setPin(userToEdit.pin || ''); 
     } else {
       setUser(defaultUserBase);
-      setPin(''); // Clear PIN for new user form (will be auto-generated or set later)
+      setPin(''); 
     }
-    setPassword(''); // Always clear password fields on form open/change
-    setConfirmPassword('');
   }, [userToEdit, isOpen]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,7 +76,7 @@ export function UserForm({ isOpen, onOpenChange, onSave, userToEdit, isEditingCu
   };
 
   const handlePinChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newPin = e.target.value.replace(/\D/g, '').slice(0, 6); // Only digits, max 6
+    const newPin = e.target.value.replace(/\D/g, '').slice(0, 6); 
     setPin(newPin);
   };
 
@@ -98,39 +90,6 @@ export function UserForm({ isOpen, onOpenChange, onSave, userToEdit, isEditingCu
       toast({ title: 'Invalid Email', description: 'Please enter a valid email address.', variant: 'destructive' });
       return;
     }
-
-    if (!userToEdit) { // New user
-      if (!password) {
-        toast({ title: 'Password Required', description: 'Password is required for new users.', variant: 'destructive' });
-        return;
-      }
-      if (password !== confirmPassword) {
-        toast({ title: 'Password Mismatch', description: 'Passwords do not match.', variant: 'destructive' });
-        return;
-      }
-      if (password.length < 6) {
-        toast({ title: 'Weak Password', description: 'Password must be at least 6 characters.', variant: 'destructive' });
-        return;
-      }
-    } else { // Editing user
-      if (password && password !== confirmPassword) { // If password is being changed
-        toast({ title: 'Password Mismatch', description: 'New passwords do not match.', variant: 'destructive' });
-        return;
-      }
-      if (password && password.length < 6) {
-        toast({ title: 'Weak Password', description: 'New password must be at least 6 characters.', variant: 'destructive' });
-        return;
-      }
-    }
-    
-    if (isEditingCurrentUser && user.role === 'Admin' && !user.isActive) {
-        toast({ title: 'Action Not Allowed', description: 'An Admin cannot deactivate their own account.', variant: 'destructive'});
-        return;
-    }
-    if (isEditingCurrentUser && user.role !== 'Admin' && currentUserRole === 'Admin') {
-         toast({ title: 'Action Not Allowed', description: 'An Admin cannot change their own role from Admin.', variant: 'destructive'});
-        return;
-    }
     
     if (pin && !/^\d{6}$/.test(pin)) {
       toast({ title: 'Invalid PIN', description: 'PIN must be 6 digits if set.', variant: 'destructive' });
@@ -139,11 +98,11 @@ export function UserForm({ isOpen, onOpenChange, onSave, userToEdit, isEditingCu
 
     const finalUserData: AppUser = {
       ...user,
-      id: userToEdit?.id || crypto.randomUUID(), // This ID will be Firebase UID on creation
-      pin: pin || undefined, // Set PIN or leave undefined if empty
+      id: userToEdit?.id || crypto.randomUUID(),
+      pin: pin || undefined, 
     };
 
-    onSave(finalUserData, password || undefined);
+    onSave(finalUserData);
     onOpenChange(false);
   };
 
@@ -153,7 +112,7 @@ export function UserForm({ isOpen, onOpenChange, onSave, userToEdit, isEditingCu
         <DialogHeader>
           <DialogTitle>{userToEdit ? 'Edit Staff User' : 'Add New Staff User'}</DialogTitle>
           <DialogDescription>
-            {userToEdit ? 'Update the details of this staff member.' : 'Fill in the details to add a new staff member. Password and PIN will be set.'}
+            {userToEdit ? 'Update the details of this staff member.' : 'Fill in the details to add a new staff member. PIN will be set or auto-generated.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
@@ -165,33 +124,25 @@ export function UserForm({ isOpen, onOpenChange, onSave, userToEdit, isEditingCu
               </div>
               <div>
                 <Label htmlFor="email">Email Address*</Label>
-                <Input id="email" name="email" type="email" value={user.email} onChange={handleChange} required disabled={!!userToEdit} />
-                 {!!userToEdit && <p className="text-xs text-muted-foreground mt-1">Email cannot be changed after creation.</p>}
+                <Input id="email" name="email" type="email" value={user.email} onChange={handleChange} required />
               </div>
               <div>
                 <Label htmlFor="role">Role*</Label>
                 <Select 
                   value={user.role} 
                   onValueChange={handleRoleChange}
-                  disabled={(isEditingCurrentUser && user.role === 'Admin') || currentUserRole !== 'Admin'}
                 >
                   <SelectTrigger id="role">
                     <SelectValue placeholder="Select a role" />
                   </SelectTrigger>
                   <SelectContent>
                     {USER_ROLES.map(roleName => (
-                      <SelectItem key={roleName} value={roleName} disabled={currentUserRole !== 'Admin' && roleName === 'Admin' && user.role !== 'Admin'}>
+                      <SelectItem key={roleName} value={roleName}>
                         {roleName}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {(isEditingCurrentUser && user.role === 'Admin') && (
-                    <p className="text-xs text-muted-foreground mt-1">Admins cannot change their own role.</p>
-                )}
-                 {currentUserRole !== 'Admin' && (
-                    <p className="text-xs text-muted-foreground mt-1">Only Admins can change roles.</p>
-                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="pin">
@@ -205,40 +156,17 @@ export function UserForm({ isOpen, onOpenChange, onSave, userToEdit, isEditingCu
                     value={pin} 
                     onChange={handlePinChange} 
                     maxLength={6} 
-                    placeholder={userToEdit ? "Leave blank to keep current" : "Auto-generated if blank"}
-                    disabled={currentUserRole !== 'Admin' && currentUserRole !== 'Manager' && !isEditingCurrentUser}
-                />
-                 {(currentUserRole !== 'Admin' && currentUserRole !== 'Manager' && !isEditingCurrentUser) && (
-                    <p className="text-xs text-muted-foreground mt-1">Only Admins/Managers can set PINs for others.</p>
-                )}
-              </div>
-              <div>
-                <Label htmlFor="password">{userToEdit ? 'New Password (leave blank to keep current)' : 'Password*'}</Label>
-                <Input id="password" name="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} 
-                 placeholder={userToEdit ? "Enter new password" : "Min. 6 characters"}
+                    placeholder={userToEdit && userToEdit.pin ? "Leave blank to keep current" : "Auto-generated if blank"}
                 />
               </div>
-              {(password || !userToEdit) && ( // Show confirm password only if password is being set/changed
-                <div>
-                    <Label htmlFor="confirmPassword">{userToEdit && password ? 'Confirm New Password' : 'Confirm Password*'}</Label>
-                    <Input id="confirmPassword" name="confirmPassword" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
-                </div>
-              )}
               <div className="flex items-center space-x-2 pt-2">
                 <Switch 
                     id="isActive" 
                     checked={user.isActive} 
                     onCheckedChange={handleActiveChange} 
-                    disabled={(isEditingCurrentUser && user.role === 'Admin') || currentUserRole !== 'Admin'}
                 />
                 <Label htmlFor="isActive">User Active</Label>
               </div>
-              {(isEditingCurrentUser && user.role === 'Admin' && !user.isActive) && (
-                <p className="text-xs text-destructive mt-1">Admins cannot deactivate their own account.</p>
-              )}
-              {currentUserRole !== 'Admin' && (
-                 <p className="text-xs text-muted-foreground mt-1">Only Admins can change active status.</p>
-              )}
             </div>
           </ScrollArea>
           <DialogFooter className="pt-4 mt-2 border-t">

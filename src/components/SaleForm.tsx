@@ -21,14 +21,13 @@ import {
 } from "@/components/ui/select";
 
 interface SaleFormProps {
-  onRecordSale: (saleData: Omit<SoldProduct, "id" | "timestamp">) => void;
+  onRecordSale: (saleData: Omit<SoldProduct, "id" | "timestamp" | "staffId" | "staffName">) => void;
   soldItemsForAISuggestion: Pick<SoldProduct, 'name' | 'price'>[];
   availableProducts: Product[];
-  currentStaffId?: string;
-  currentStaffName?: string;
+  // currentStaffId and currentStaffName props removed
 }
 
-export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProducts, currentStaffId, currentStaffName }: SaleFormProps) {
+export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProducts }: SaleFormProps) {
   const [productName, setProductName] = useState("");
   const [quantity, setQuantity] = useState<number | string>(1);
   const [price, setPrice] = useState<number | string>("");
@@ -89,7 +88,6 @@ export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProd
       };
       const suggestion = await suggestProductDetails(suggestionInput);
       
-      // Apply suggestion only if no product is selected from inventory, or if selected product name matches suggestion
       if (!selectedProductId || (selectedProductId && suggestion.productName.toLowerCase().includes(currentProductInfo.toLowerCase()))) {
          setProductName(suggestion.productName);
       }
@@ -106,8 +104,8 @@ export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProd
   const handleProductSelectionChange = (productId: string) => {
     if (productId === "custom") {
       setSelectedProductId(undefined);
-      setProductName(""); // Clear name if switching to custom
-      setPrice(""); // Clear price
+      setProductName(""); 
+      setPrice(""); 
       return;
     }
     const product = availableProducts.find(p => p.id === productId);
@@ -115,7 +113,6 @@ export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProd
       setSelectedProductId(product.id);
       setProductName(product.name);
       setPrice(product.price);
-      // Optionally, set quantity to 1 or max available stock
       setQuantity(1); 
     }
   };
@@ -147,17 +144,14 @@ export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProd
         total, 
         productId: selectedProductId,
         paymentMethod: paymentMethod,
-        staffId: currentStaffId,
-        staffName: currentStaffName,
+        // staffId and staffName removed
     });
 
-    // Reset form
     setProductName("");
     setQuantity(1);
     setPrice("");
     setSelectedProductId(undefined);
     setPaymentMethod(PAYMENT_METHODS[0]);
-    // toast({ title: "Sale Recorded", description: `${productName} (x${numQuantity}) added to history.` }); // Toast handled in parent page
   };
   
   const canSubmit = productName.trim() && Number(quantity) > 0 && Number(price) > 0;
@@ -209,7 +203,7 @@ export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProd
                 onChange={(e) => setProductName(e.target.value)}
                 placeholder="e.g., Organic Apples or AI Suggested"
                 required
-                disabled={!!selectedProductId} // Disable if product selected from list
+                disabled={!!selectedProductId}
               />
               <TooltipProvider>
                 <Tooltip>
@@ -251,7 +245,7 @@ export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProd
                 min="0.01"
                 step="0.01"
                 required
-                disabled={!!selectedProductId} // Disable if product selected from list
+                disabled={!!selectedProductId}
               />
             </div>
           </div>

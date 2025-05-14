@@ -16,11 +16,10 @@ import {
   DialogTitle,
   DialogFooter,
   DialogClose,
-  DialogDescription as ReceiptDialogDescription, // Renamed to avoid conflict with CardDescription
+  DialogDescription as ReceiptDialogDescription,
 } from "@/components/ui/dialog";
 import { useReactToPrint } from 'react-to-print';
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
 
 export default function SalesPage() {
   const [soldItems, setSoldItems] = useState<SoldProduct[]>([]);
@@ -30,12 +29,9 @@ export default function SalesPage() {
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const receiptComponentRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
-  const { currentUser, currentUserProfile, loading: authLoading } = useAuth(); // Get current user from AuthContext
 
   useEffect(() => {
     setIsMounted(true);
-    if (authLoading) return; // Wait for auth to load
-
     const savedSoldItems = localStorage.getItem("soldItems");
     if (savedSoldItems) {
       try {
@@ -54,31 +50,26 @@ export default function SalesPage() {
         setProducts([]);
       }
     }
-  }, [authLoading]);
+  }, []);
 
   useEffect(() => {
-    if (isMounted && !authLoading) {
+    if (isMounted) {
       localStorage.setItem("soldItems", JSON.stringify(soldItems));
     }
-  }, [soldItems, isMounted, authLoading]);
+  }, [soldItems, isMounted]);
 
   useEffect(() => {
-    if (isMounted && !authLoading) {
+    if (isMounted) {
       localStorage.setItem("products", JSON.stringify(products));
     }
-  }, [products, isMounted, authLoading]);
+  }, [products, isMounted]);
 
   const handleRecordSale = (newSaleData: Omit<SoldProduct, "id" | "timestamp" | "staffId" | "staffName">) => {
-    if (!currentUser || !currentUserProfile) {
-        toast({ title: "Error", description: "No authenticated user found. Please log in.", variant: "destructive" });
-        return;
-    }
     const newSale: SoldProduct = {
       ...newSaleData,
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
-      staffId: currentUser.uid, 
-      staffName: currentUserProfile.name, 
+      // staffId and staffName removed as auth is removed
     };
     setSoldItems((prevItems) => [newSale, ...prevItems]);
 
@@ -93,7 +84,7 @@ export default function SalesPage() {
     }
     setReceiptData(newSale);
     setIsReceiptModalOpen(true);
-    toast({ title: "Sale Recorded", description: `${newSale.name} (x${newSale.quantity}) by ${currentUserProfile.name} added to history.` });
+    toast({ title: "Sale Recorded", description: `${newSale.name} (x${newSale.quantity}) added to history.` });
   };
   
   const recentItemsForAI = soldItems.slice(0, 10).map(item => ({ name: item.name, price: item.price }));
@@ -105,7 +96,7 @@ export default function SalesPage() {
     onPrintError: () => toast({title: "Print Error", description: "Could not print receipt.", variant: "destructive"}),
   });
 
-  if (authLoading || !isMounted) {
+  if (!isMounted) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-150px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -113,28 +104,13 @@ export default function SalesPage() {
       </div>
     );
   }
-  
-  if (!currentUser) {
-    return (
-         <Card>
-            <CardHeader>
-                <CardTitle>Access Denied</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <p>You must be logged in to access the sales page. Please log in.</p>
-                 {/* Optionally, redirect or show login button */}
-            </CardContent>
-        </Card>
-    );
-  }
-
 
   return (
     <div className="space-y-8">
         <header className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight">Sales Management</h1>
-          <CardDescription className="text-muted-foreground text-md"> {/* Changed p to CardDescription */}
-            Record new sales and view sales history. Current User: {currentUserProfile?.name || "Loading..."} ({currentUserProfile?.role || ''})
+          <CardDescription className="text-muted-foreground text-md">
+            Record new sales and view sales history.
           </CardDescription>
         </header>
 
@@ -145,8 +121,7 @@ export default function SalesPage() {
                 onRecordSale={handleRecordSale} 
                 soldItemsForAISuggestion={isMounted ? recentItemsForAI : []}
                 availableProducts={isMounted ? products : []}
-                currentStaffId={currentUser.uid} // Pass Firebase UID
-                currentStaffName={currentUserProfile?.name} // Pass profile name
+                // currentStaffId and currentStaffName props removed
               />
             </div>
             <div className="lg:col-span-3">
@@ -170,7 +145,7 @@ export default function SalesPage() {
             <DialogContent className="sm:max-w-md printable-receipt">
               <DialogHeader>
                 <DialogTitle>Sale Receipt</DialogTitle>
-                <ReceiptDialogDescription className="no-print"> {/* Use Renamed component */}
+                <ReceiptDialogDescription className="no-print">
                   Review the details of the sale. Click print to get a hard copy.
                 </ReceiptDialogDescription>
               </DialogHeader>
