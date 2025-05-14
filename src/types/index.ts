@@ -20,76 +20,75 @@ export interface Customer {
   address?: string; // Full address as a string for simplicity
 }
 
-// Renamed from Purchase to PurchaseOrderItem as it represents an item in a PurchaseOrder
 export interface PurchaseOrderItem {
-  id: string; // Unique ID for the line item itself, if needed for React keys or direct manipulation
+  id: string; 
   productId: string; 
-  productName: string; // Denormalized product name at the time of purchase
+  productName: string; 
   quantity: number;
   costPerItem: number;
-  totalCost: number; // quantity * costPerItem
+  totalCost: number; 
 }
 
 export interface PurchaseOrder {
-  id: string; // Unique ID for the purchase order
-  supplierName: string; // For simplicity, not a full Supplier object yet
-  orderDate: string; // ISO string
-  receivedDate?: string; // ISO string, set when status becomes 'Received'
+  id: string; 
+  supplierName: string; 
+  orderDate: string; 
+  receivedDate?: string; 
   status: 'Pending' | 'Received' | 'Cancelled';
   items: PurchaseOrderItem[];
-  grandTotal: number; // Sum of totalCost for all items
+  grandTotal: number; 
   notes?: string;
 }
 
+export const USER_ROLES = ['Admin', 'Manager', 'Cashier', 'Staff'] as const;
+export type UserRole = typeof USER_ROLES[number];
 
 export interface User {
   id: string;
   name: string;
-  role: 'admin' | 'cashier'; // Example roles
-  // Add other user-specific fields like email, password hash (not in scope for localStorage)
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+  password?: string; // Plain text for client-side example. NOT FOR PRODUCTION.
 }
 
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export interface SoldProduct {
   id: string;
-  name: string; // Could be custom item or product name
-  price: number; // Unit price at the time of sale
+  name: string; 
+  price: number; 
   quantity: number;
   subtotal: number;
   taxAmount: number;
   total: number;
-  timestamp: string; // ISO string for easy serialization and sorting
-  productId?: string; // Link to Product if sold from inventory
-  customerId?: string; // Link to Customer
+  timestamp: string; 
+  productId?: string; 
+  customerId?: string; 
   paymentMethod: PaymentMethod;
 }
 
-// Suggestion from AI for product name and price based on user input and sales history
 export interface ProductSuggestion {
   productName: string;
   productPrice: number;
 }
 
-// Suggestion from AI for product description and category based on product name
 export interface ProductAttributeSuggestion {
   description: string;
   category: string;
 }
 
-// Represents a recipe or build configuration for a product
 export interface BuiltProductRecipe {
   id: string;
-  name: string; // Name of the recipe, e.g., "Deluxe Burger Recipe"
+  name: string; 
   
-  // Simplified costs for this iteration
   totalIngredientsCost: number;
   totalLabourCost: number;
   totalPackagingCost: number;
   
-  totalCalculatedCost: number; // Will be sum of the above three, calculated automatically
+  totalCalculatedCost: number; 
   
   notes?: string;
-  outputProductName?: string; // Suggested name for the final product if different from recipe name
-  outputProductDescription?: string; // Suggested description for the final product
+  outputProductName?: string; 
+  outputProductDescription?: string; 
 }
