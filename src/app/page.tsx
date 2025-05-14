@@ -6,25 +6,36 @@ import { SaleForm } from "@/components/SaleForm";
 import { SalesHistoryTable } from "@/components/SalesHistoryTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { APP_TITLE } from "@/config/constants";
-import { Toaster } from "@/components/ui/toaster";
 import { History, ShoppingCart } from "lucide-react"; // Import History icon
-import Image from 'next/image';
-
 
 export default function HomePage() {
-  const [soldItems, setSoldItems] = useState<SoldProduct[]>(() => {
-    if (typeof window !== 'undefined') {
-      const savedItems = localStorage.getItem("soldItems");
-      return savedItems ? JSON.parse(savedItems) : [];
-    }
-    return [];
-  });
+  const [soldItems, setSoldItems] = useState<SoldProduct[]>([]);
+  const [currentYear, setCurrentYear] = useState<number | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    // This effect runs only on the client, after the component has mounted.
+    setIsMounted(true);
+    setCurrentYear(new Date().getFullYear());
+
+    const savedItems = localStorage.getItem("soldItems");
+    if (savedItems) {
+      try {
+        setSoldItems(JSON.parse(savedItems));
+      } catch (e) {
+        console.error("Failed to parse soldItems from localStorage", e);
+        setSoldItems([]); // Fallback to empty if parsing fails
+      }
+    }
+  }, []); // Empty dependency array: runs once after initial mount
+
+  useEffect(() => {
+    // This effect saves to localStorage.
+    // It runs only on the client (due to isMounted check) and when soldItems changes.
+    if (isMounted) {
       localStorage.setItem("soldItems", JSON.stringify(soldItems));
     }
-  }, [soldItems]);
+  }, [soldItems, isMounted]);
 
   const handleRecordSale = (newSaleData: Omit<SoldProduct, "id" | "timestamp">) => {
     const newSale: SoldProduct = {
@@ -36,7 +47,6 @@ export default function HomePage() {
   };
   
   const recentItemsForAI = soldItems.slice(0, 10).map(item => ({ name: item.name, price: item.price }));
-
 
   return (
     <>
@@ -54,7 +64,10 @@ export default function HomePage() {
         <main className="container mx-auto max-w-7xl">
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
             <div className="lg:col-span-2">
-              <SaleForm onRecordSale={handleRecordSale} soldItemsForAISuggestion={recentItemsForAI} />
+              <SaleForm 
+                onRecordSale={handleRecordSale} 
+                soldItemsForAISuggestion={isMounted ? recentItemsForAI : []} 
+              />
             </div>
             <div className="lg:col-span-3">
               <Card className="shadow-lg">
@@ -72,10 +85,13 @@ export default function HomePage() {
           </div>
         </main>
         <footer className="mt-12 text-center text-sm text-muted-foreground">
-          <p>&copy; {new Date().getFullYear()} {APP_TITLE}. All rights reserved.</p>
+          {isMounted && currentYear ? (
+            <p>&copy; {currentYear} {APP_TITLE}. All rights reserved.</p>
+          ) : (
+            <p>&copy; {APP_TITLE}. All rights reserved.</p> 
+          )}
         </footer>
       </div>
-      <Toaster />
     </>
   );
 }
