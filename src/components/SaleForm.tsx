@@ -24,9 +24,11 @@ interface SaleFormProps {
   onRecordSale: (saleData: Omit<SoldProduct, "id" | "timestamp">) => void;
   soldItemsForAISuggestion: Pick<SoldProduct, 'name' | 'price'>[];
   availableProducts: Product[];
+  currentStaffId?: string;
+  currentStaffName?: string;
 }
 
-export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProducts }: SaleFormProps) {
+export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProducts, currentStaffId, currentStaffName }: SaleFormProps) {
   const [productName, setProductName] = useState("");
   const [quantity, setQuantity] = useState<number | string>(1);
   const [price, setPrice] = useState<number | string>("");
@@ -145,6 +147,8 @@ export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProd
         total, 
         productId: selectedProductId,
         paymentMethod: paymentMethod,
+        staffId: currentStaffId,
+        staffName: currentStaffName,
     });
 
     // Reset form
@@ -153,7 +157,7 @@ export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProd
     setPrice("");
     setSelectedProductId(undefined);
     setPaymentMethod(PAYMENT_METHODS[0]);
-    toast({ title: "Sale Recorded", description: `${productName} (x${numQuantity}) added to history.` });
+    // toast({ title: "Sale Recorded", description: `${productName} (x${numQuantity}) added to history.` }); // Toast handled in parent page
   };
   
   const canSubmit = productName.trim() && Number(quantity) > 0 && Number(price) > 0;

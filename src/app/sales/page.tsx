@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import type { SoldProduct, Product } from "@/types"; // Added Product type
+import type { SoldProduct, Product, User } from "@/types"; // Added Product and User type
 import { SaleForm } from "@/components/SaleForm";
 import { SalesHistoryTable } from "@/components/SalesHistoryTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,11 +20,12 @@ import {
 } from "@/components/ui/dialog";
 import { useReactToPrint } from 'react-to-print';
 import { useToast } from "@/hooks/use-toast";
-
+import { DUMMY_CURRENT_USER_ID_FOR_SALES } from "@/config/constants"; // Placeholder for current user ID
 
 export default function SalesPage() {
   const [soldItems, setSoldItems] = useState<SoldProduct[]>([]);
   const [products, setProducts] = useState<Product[]>([]); // State for products
+  const [currentStaff, setCurrentStaff] = useState<User | null>(null); // State for current staff
   const [isMounted, setIsMounted] = useState(false);
   const [receiptData, setReceiptData] = useState<SoldProduct | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
@@ -51,6 +52,25 @@ export default function SalesPage() {
         setProducts([]);
       }
     }
+    const storedUsers = localStorage.getItem('staffUsers');
+    if (storedUsers) {
+      try {
+        const users: User[] = JSON.parse(storedUsers);
+        // Attempt to find a "current" user for sales attribution.
+        // This is a placeholder. In a real app, this would come from an auth context.
+        const currentUser = users.find(u => u.id === DUMMY_CURRENT_USER_ID_FOR_SALES && u.isActive);
+        if (currentUser) {
+            setCurrentStaff(currentUser);
+        } else {
+            // Fallback: if no specific dummy user, or dummy is inactive, pick first active admin or first active user.
+             const firstActiveAdmin = users.find(u => u.role === 'Admin' && u.isActive);
+             if(firstActiveAdmin) setCurrentStaff(firstActiveAdmin);
+             else setCurrentStaff(users.find(u => u.isActive) || null);
+        }
+      } catch (e) {
+        console.error("Failed to parse staffUsers from localStorage", e);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -70,6 +90,8 @@ export default function SalesPage() {
       ...newSaleData,
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
+      staffId: currentStaff?.id, // Add staffId
+      staffName: currentStaff?.name, // Add staffName
     };
     setSoldItems((prevItems) => [newSale, ...prevItems]);
 
@@ -85,7 +107,7 @@ export default function SalesPage() {
     }
     setReceiptData(newSale);
     setIsReceiptModalOpen(true);
-    toast({ title: "Sale Recorded", description: `${newSale.name} (x${newSale.quantity}) added to history.` });
+    toast({ title: "Sale Recorded", description: `${newSale.name} (x${newSale.quantity}) by ${currentStaff?.name || 'Staff'} added to history.` });
   };
   
   const recentItemsForAI = soldItems.slice(0, 10).map(item => ({ name: item.name, price: item.price }));
@@ -102,7 +124,7 @@ export default function SalesPage() {
         <header className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight">Sales Management</h1>
           <p className="text-muted-foreground text-md">
-            Record new sales and view sales history.
+            Record new sales and view sales history. Current User: {currentStaff?.name || "Not Logged In"}
           </p>
         </header>
 
@@ -113,6 +135,8 @@ export default function SalesPage() {
                 onRecordSale={handleRecordSale} 
                 soldItemsForAISuggestion={isMounted ? recentItemsForAI : []}
                 availableProducts={isMounted ? products : []}
+                currentStaffId={currentStaff?.id}
+                currentStaffName={currentStaff?.name}
               />
             </div>
             <div className="lg:col-span-3">

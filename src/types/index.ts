@@ -66,6 +66,8 @@ export interface SoldProduct {
   productId?: string; 
   customerId?: string; 
   paymentMethod: PaymentMethod;
+  staffId?: string; // ID of the staff member who made the sale
+  staffName?: string; // Name of the staff member (optional, for convenience)
 }
 
 export interface ProductSuggestion {
