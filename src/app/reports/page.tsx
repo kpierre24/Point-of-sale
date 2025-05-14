@@ -11,6 +11,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCap
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FileText, BarChartBig, UserSquare, CalendarDays } from "lucide-react";
 import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, isWithinInterval, getWeek, getMonth, getYear } from 'date-fns';
+import { Label } from "@/components/ui/label"; // Added import for Label
 
 type ReportType = 'staff' | 'daily' | 'weekly' | 'monthly' | '';
 interface ReportDataItem {
@@ -318,3 +319,4 @@ export default function ReportsPage() {
     </div>
   );
 }
+
