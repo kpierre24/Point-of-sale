@@ -17,7 +17,7 @@ export interface Customer {
   name: string;
   email?: string;
   phone?: string;
-  address?: string;
+  address?: string; // Full address as a string for simplicity
 }
 
 // Renamed from Purchase to PurchaseOrderItem as it represents an item in a PurchaseOrder
@@ -93,4 +93,3 @@ export interface BuiltProductRecipe {
   outputProductName?: string; // Suggested name for the final product if different from recipe name
   outputProductDescription?: string; // Suggested description for the final product
 }
-
