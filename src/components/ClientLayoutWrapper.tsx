@@ -112,7 +112,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
       console.error("Error fetching app settings from Firestore:", error);
       toast({
         title: "Error Loading Settings",
-        description: "Could not load app settings. Using defaults.",
+        description: `Could not load app settings. Using defaults. Details: ${error.message || 'Unknown error'}`,
         variant: "destructive",
       });
       setAppTitle(DEFAULT_APP_TITLE);
@@ -207,4 +207,3 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
     </QueryClientProvider>
   );
 }
-

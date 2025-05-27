@@ -1,7 +1,6 @@
 // src/lib/firebase.ts
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
-// getAuth and Auth type removed
-import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getFirestore, type Firestore, enableIndexedDbPersistence } from 'firebase/firestore'; // Added enableIndexedDbPersistence
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -14,7 +13,6 @@ const firebaseConfig = {
 };
 
 let app: FirebaseApp;
-// authInstance removed
 let dbInstance: Firestore | null = null;
 
 if (typeof window !== 'undefined' && (!firebaseConfig.apiKey || !firebaseConfig.projectId)) {
@@ -29,18 +27,35 @@ if (firebaseConfig.apiKey && firebaseConfig.projectId) {
   if (!getApps().length) {
     try {
       app = initializeApp(firebaseConfig);
-      // authInstance initialization removed
       dbInstance = getFirestore(app);
+      if (dbInstance) {
+        enableIndexedDbPersistence(dbInstance)
+          .catch((err) => {
+            if (err.code == 'failed-precondition') {
+              console.warn('Firestore persistence failed: Multiple tabs open, persistence can only be enabled in one tab at a time.');
+            } else if (err.code == 'unimplemented') {
+              console.warn('Firestore persistence failed: The current browser does not support all of the features required to enable persistence.');
+            } else {
+              console.warn('Firestore persistence failed:', err);
+            }
+          });
+      }
     } catch (error) {
       console.error("Firebase initialization error:", error);
+      dbInstance = null; // Ensure dbInstance is null on error
     }
   } else {
     app = getApp();
     try {
-        // authInstance retrieval removed
         dbInstance = getFirestore(app);
+        // Note: enableIndexedDbPersistence should ideally be called only once.
+        // If getApps().length > 0, persistence might have already been set or failed.
+        // For simplicity here, we don't re-attempt if app already exists,
+        // assuming it was configured correctly on first init.
+        // If it was critical to ensure it's enabled here too, more complex logic to track state would be needed.
     } catch (error) {
         console.error("Firebase get existing app instances error:", error);
+        dbInstance = null; // Ensure dbInstance is null on error
     }
   }
 } else {
@@ -50,6 +65,7 @@ if (firebaseConfig.apiKey && firebaseConfig.projectId) {
         "This might be expected during certain build phases if .env.local is not yet configured."
     );
   }
+  // dbInstance is already null by default
 }
 
 // Export dbInstance (which can be null)
