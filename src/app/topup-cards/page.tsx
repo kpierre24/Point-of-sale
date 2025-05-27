@@ -85,19 +85,20 @@ export default function TopUpCardsPage() {
     }
   };
 
+  const refreshCardDataForDialog = useCallback((cardId: string) => {
+      const cardToRefresh = cards.find(c => c.cardId === cardId);
+      if (cardToRefresh) {
+          setSelectedCard(cardToRefresh);
+          setSelectedCardTransactions(transactions.filter(tx => tx.cardId === cardToRefresh.cardId));
+      }
+  }, [cards, transactions]); // Dependencies: cards and transactions. State setters are stable.
+
   const handleManageCard = (card: TopUpCard) => {
     setSelectedCard(card);
     setSelectedCardTransactions(transactions.filter(tx => tx.cardId === card.cardId));
     setIsManageDialogOpen(true);
   };
 
-  const refreshCardDataForDialog = (cardId: string) => {
-      const cardToRefresh = cards.find(c => c.cardId === cardId);
-      if (cardToRefresh) {
-          setSelectedCard(cardToRefresh);
-          setSelectedCardTransactions(transactions.filter(tx => tx.cardId === cardToRefresh.cardId));
-      }
-  }
 
   const handleTopUp = (cardId: string, amount: number, notes?: string) => {
     setCards(prevCards => 

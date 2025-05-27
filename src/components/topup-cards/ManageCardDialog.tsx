@@ -43,7 +43,7 @@ export function ManageCardDialog({
   transactions,
   onTopUp,
   onDeduct,
-  onRefreshCardData,
+  onRefreshCardData, // This prop is available but its direct call from useEffect was problematic
 }: ManageCardDialogProps) {
   const [topUpAmount, setTopUpAmount] = useState('');
   const [topUpNotes, setTopUpNotes] = useState('');
@@ -54,15 +54,18 @@ export function ManageCardDialog({
 
   useEffect(() => {
     if (isOpen) {
+      // Reset form fields when the dialog opens or the card being viewed changes
       setTopUpAmount('');
       setTopUpNotes('');
       setDeductAmount('');
       setDeductNotes('');
-      if (card && onRefreshCardData) {
-        onRefreshCardData(card.cardId);
-      }
+      // The parent component (`TopUpCardsPage`) is responsible for ensuring the `card` 
+      // and `transactions` props are up-to-date when the dialog is opened
+      // or when a top-up/deduction occurs via `onTopUp`/`onDeduct` callbacks
+      // which then trigger `refreshCardDataForDialog` in the parent.
+      // Thus, calling `onRefreshCardData` here is likely redundant and can cause loops.
     }
-  }, [isOpen, card, onRefreshCardData]);
+  }, [isOpen, card?.id]); // Effect runs when dialog opens or a different card is passed
 
   if (!card) return null;
 
@@ -221,3 +224,4 @@ export function ManageCardDialog({
     </Dialog>
   );
 }
+
