@@ -6,6 +6,7 @@ import type { TopUpCard, CardTransaction, Customer } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input'; // For manual ID entry
+import { Label } from '@/components/ui/label'; // Added import for Label
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from '@/components/ui/table';
 import { CreateTopUpCardDialog } from '@/components/topup-cards/CreateTopUpCardDialog';
@@ -324,3 +325,4 @@ export default function TopUpCardsPage() {
     </div>
   );
 }
+
