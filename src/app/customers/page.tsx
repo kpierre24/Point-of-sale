@@ -96,11 +96,15 @@ export default function CustomersPage() {
       if (existingIndex > -1) {
         const updatedCustomers = [...prevCustomers];
         updatedCustomers[existingIndex] = customer;
-        toast({ title: 'Customer Updated', description: `${customer.name} has been updated.` });
+        setTimeout(() => {
+          toast({ title: 'Customer Updated', description: `${customer.name} has been updated.` });
+        }, 0);
         return updatedCustomers;
       } else {
         isNewCustomer = true;
-        toast({ title: 'Customer Added', description: `${customer.name} has been added to your database.` });
+        setTimeout(() => {
+          toast({ title: 'Customer Added', description: `${customer.name} has been added to your database.` });
+        }, 0);
         return [customer, ...prevCustomers];
       }
     });
@@ -118,15 +122,17 @@ export default function CustomersPage() {
         lastUpdatedAt: now,
       };
       setTopUpCards(prevCards => [newTopUpCard, ...prevCards]);
-      toast({
-        title: 'Top-Up Card Created',
-        description: (
-          <div className="flex items-center">
-            <CreditCard className="mr-2 h-4 w-4" />
-            <span>Top-Up Card {newTopUpCard.cardId} created for {customer.name}.</span>
-          </div>
-        ),
-      });
+      setTimeout(() => {
+        toast({
+          title: 'Top-Up Card Created',
+          description: (
+            <div className="flex items-center">
+              <CreditCard className="mr-2 h-4 w-4" />
+              <span>Top-Up Card {newTopUpCard.cardId} created for {customer.name}.</span>
+            </div>
+          ),
+        });
+      }, 0);
     }
     setCustomerToEdit(null);
   };
@@ -146,7 +152,9 @@ export default function CustomersPage() {
     // Consider what to do with linked top-up cards upon customer deletion (e.g., deactivate, orphan, or delete)
     // For now, cards are not deleted with customers.
     setCustomers((prevCustomers) => prevCustomers.filter((c) => c.id !== customerId));
-    toast({ title: 'Customer Deleted', description: `${customerName} has been removed from your database.`, variant: 'destructive' });
+    setTimeout(() => {
+      toast({ title: 'Customer Deleted', description: `${customerName} has been removed from your database.`, variant: 'destructive' });
+    }, 0);
   };
 
   const filteredCustomers = customers.filter(customer =>
