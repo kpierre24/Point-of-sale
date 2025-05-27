@@ -8,11 +8,11 @@ body {
 
 @layer base {
   :root {
-    --background: 220 20% 96%; /* Light Gray - Slightly blueish gray for neutrality */
-    --foreground: 220 15% 25%; /* Darker Gray-Blue for text */
+    --background: 0 0% 96%; /* Light Gray (#F5F5F5) */
+    --foreground: 220 15% 25%; /* Darker Gray-Blue for text - kept for contrast */
 
-    --muted: 220 15% 90%; /* Lighter muted gray */
-    --muted-foreground: 220 10% 45%; /* Muted text color */
+    --muted: 0 0% 90%; /* Lighter muted gray */
+    --muted-foreground: 0 0% 45%; /* Muted text color - neutral gray */
 
     --popover: 0 0% 100%;
     --popover-foreground: 220 15% 25%;
@@ -20,16 +20,16 @@ body {
     --card: 0 0% 100%; /* White for cards */
     --card-foreground: 220 15% 25%;
 
-    --border: 220 15% 88%; /* Softer border color */
-    --input: 220 15% 88%; /* Input border to match general borders */
+    --border: 0 0% 88%; /* Softer neutral gray border */
+    --input: 0 0% 88%; /* Input border to match general borders - neutral gray */
 
-    --primary: 122 39% 49%; /* Green for primary actions */
+    --primary: 122 39% 49%; /* Green for primary actions (#4CAF50) - Accent in PRD */
     --primary-foreground: 0 0% 100%; /* White text on green */
 
-    --secondary: 190 70% 93%; /* Light Blue for secondary elements */
+    --secondary: 190 70% 93%; /* Light Blue for secondary elements (#E0F7FA) - Primary in PRD */
     --secondary-foreground: 190 30% 30%; /* Darker blue for text on light blue */
 
-    --accent: 190 70% 88%; /* Slightly more saturated light blue for accents */
+    --accent: 190 70% 88%; /* Slightly more saturated light blue for accents (can also be green if desired) */
     --accent-foreground: 190 30% 25%; /* Darker blue for text on accent */
 
     --destructive: 0 72% 51%; /* Default destructive red */
@@ -45,13 +45,13 @@ body {
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
 
-    --sidebar-background: 220 15% 98%; /* Slightly off-white for sidebar */
+    --sidebar-background: 0 0% 98%; /* Slightly off-white for sidebar, neutral */
     --sidebar-foreground: 220 15% 25%;
     --sidebar-primary: 122 39% 49%;
     --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 190 70% 93%;
     --sidebar-accent-foreground: 190 30% 30%;
-    --sidebar-border: 220 15% 88%;
+    --sidebar-border: 0 0% 88%;
     --sidebar-ring: 122 45% 55%;
   }
 

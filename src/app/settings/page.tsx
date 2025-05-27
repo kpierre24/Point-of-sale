@@ -20,6 +20,9 @@ const defaultSettings: AppSettings = {
   taxRate: (DEFAULT_TAX_RATE_PERCENT * 100).toString(), // Store as string, e.g., "10"
   receiptFooter: "Thank you for your business!",
   darkMode: false,
+  storeAddress: "",
+  storePhone: "",
+  storeWebsite: "",
 };
 
 export default function SettingsPage() {
@@ -32,8 +35,10 @@ export default function SettingsPage() {
     if (storedSettings) {
       try {
         const parsedSettings = JSON.parse(storedSettings);
-        setSettings({ ...defaultSettings, ...parsedSettings });
-        if (parsedSettings.darkMode) {
+        // Ensure all fields from defaultSettings are present, even if not in storedSettings
+        const mergedSettings = { ...defaultSettings, ...parsedSettings };
+        setSettings(mergedSettings);
+        if (mergedSettings.darkMode) {
           document.documentElement.classList.add('dark');
         } else {
           document.documentElement.classList.remove('dark');
@@ -111,7 +116,7 @@ export default function SettingsPage() {
       <form onSubmit={handleSaveSettings}>
         <Card>
           <CardHeader>
-              <CardTitle>General Settings</CardTitle>
+              <CardTitle>Store & General Settings</CardTitle>
               <CardDescription>Manage basic application configurations. Changes are saved locally.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -124,6 +129,41 @@ export default function SettingsPage() {
                     value={settings.storeName}
                     onChange={handleInputChange} 
                   />
+              </div>
+              <div className="space-y-2">
+                  <Label htmlFor="storeAddress">Store Address</Label>
+                  <Textarea 
+                    id="storeAddress" 
+                    name="storeAddress"
+                    placeholder="123 Main St, Anytown, USA" 
+                    value={settings.storeAddress || ""}
+                    onChange={handleInputChange} 
+                    rows={2}
+                  />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label htmlFor="storePhone">Store Phone</Label>
+                    <Input 
+                      id="storePhone" 
+                      name="storePhone"
+                      type="tel"
+                      placeholder="(555) 123-4567" 
+                      value={settings.storePhone || ""}
+                      onChange={handleInputChange} 
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="storeWebsite">Store Website/Email</Label>
+                    <Input 
+                      id="storeWebsite" 
+                      name="storeWebsite"
+                      type="text"
+                      placeholder="www.example.com or info@example.com" 
+                      value={settings.storeWebsite || ""}
+                      onChange={handleInputChange} 
+                    />
+                </div>
               </div>
               <div className="space-y-2">
                   <Label htmlFor="taxRate">Default Tax Rate (%)</Label>

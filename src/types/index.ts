@@ -40,7 +40,7 @@ export interface PurchaseOrder {
   notes?: string;
 }
 
-export const USER_ROLES = ['Admin', 'Manager', 'Cashier', 'Staff'] as const;
+export const USER_ROLES = ['Front Staff', 'Manager', 'Owner', 'Administrator'] as const;
 export type UserRole = typeof USER_ROLES[number];
 
 // Represents the custom user profile stored locally
@@ -127,4 +127,7 @@ export interface AppSettings {
   taxRate: string; // Stored as string, e.g., "10" for 10%
   receiptFooter: string;
   darkMode: boolean;
+  storeAddress?: string;
+  storePhone?: string;
+  storeWebsite?: string;
 }

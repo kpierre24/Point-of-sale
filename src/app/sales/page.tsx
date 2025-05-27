@@ -140,55 +140,46 @@ export default function SalesPage() {
 
   const deductFromCardBalance = useCallback((cardId: string, amountToDeduct: number, notes: string): boolean => {
     let success = false;
-    setTopUpCards(prevCards => {
-        const cardIndex = prevCards.findIndex(c => c.cardId.toUpperCase() === cardId.toUpperCase());
-        if (cardIndex === -1) {
-            toast({ title: 'Card Not Found', description: `Card ${cardId} not found for deduction.`, variant: 'destructive' });
-            success = false;
-            return prevCards;
-        }
+    const cardToUpdate = topUpCards.find(c => c.cardId.toUpperCase() === cardId.toUpperCase());
 
-        const cardToUpdate = prevCards[cardIndex];
+    if (!cardToUpdate) {
+        toast({ title: 'Card Not Found', description: `Card ${cardId} not found for deduction.`, variant: 'destructive' });
+        return false;
+    }
 
-        if (cardToUpdate.currentBalance < amountToDeduct) {
-            toast({ title: 'Insufficient Balance', description: `Card ${cardId} has only ${formatCurrency(cardToUpdate.currentBalance)}. Deduction of ${formatCurrency(amountToDeduct)} failed.`, variant: 'destructive' });
-            success = false;
-            return prevCards;
-        }
+    if (cardToUpdate.currentBalance < amountToDeduct) {
+        toast({ title: 'Insufficient Balance', description: `Card ${cardId} has only ${formatCurrency(cardToUpdate.currentBalance)}. Deduction of ${formatCurrency(amountToDeduct)} failed.`, variant: 'destructive' });
+        return false;
+    }
 
-        const newBalance = cardToUpdate.currentBalance - amountToDeduct;
-        const now = new Date().toISOString();
+    const newBalance = cardToUpdate.currentBalance - amountToDeduct;
+    const now = new Date().toISOString();
 
-        const updatedCardData: TopUpCard = {
-            ...cardToUpdate,
-            currentBalance: newBalance,
-            lastUpdatedAt: now,
-        };
-        
-        const updatedCards = [...prevCards];
-        updatedCards[cardIndex] = updatedCardData;
+    const updatedCardData: TopUpCard = {
+        ...cardToUpdate,
+        currentBalance: newBalance,
+        lastUpdatedAt: now,
+    };
+    
+    const newTransaction: CardTransaction = {
+        id: crypto.randomUUID(),
+        cardId: cardToUpdate.cardId,
+        timestamp: now,
+        type: 'Purchase',
+        amount: -amountToDeduct,
+        balanceBefore: cardToUpdate.currentBalance,
+        balanceAfter: newBalance,
+        staffMember: 'Staff User', // Placeholder
+        notes,
+    };
+    
+    setTopUpCards(prevCards => prevCards.map(c => c.id === updatedCardData.id ? updatedCardData : c));
+    setCardTransactions(prevTx => [newTransaction, ...prevTx]);
 
-        const newTransaction: CardTransaction = {
-            id: crypto.randomUUID(),
-            cardId: cardToUpdate.cardId,
-            timestamp: now,
-            type: 'Purchase',
-            amount: -amountToDeduct,
-            balanceBefore: cardToUpdate.currentBalance,
-            balanceAfter: newBalance,
-            staffMember: 'Staff User', // Placeholder
-            notes,
-        };
-        
-        // Add transaction separately to avoid issues with React state updates
-        setCardTransactions(prevTx => [newTransaction, ...prevTx]);
-
-        toast({ title: 'Card Payment Processed', description: `${formatCurrency(amountToDeduct)} deducted from card ${cardToUpdate.cardId}.` });
-        success = true;
-        return updatedCards;
-    });
+    toast({ title: 'Card Payment Processed', description: `${formatCurrency(amountToDeduct)} deducted from card ${cardToUpdate.cardId}.` });
+    success = true;
     return success;
-  }, [toast]);
+  }, [topUpCards, toast]); // Removed setCardTransactions from dependencies for setTopUpCards to avoid potential issues
 
 
   if (!isMounted) {
@@ -250,6 +241,9 @@ export default function SalesPage() {
                 ref={receiptComponentRef} 
                 sale={receiptData}
                 storeName={appSettings.storeName || DEFAULT_APP_TITLE}
+                storeAddress={appSettings.storeAddress}
+                storePhone={appSettings.storePhone}
+                storeWebsite={appSettings.storeWebsite}
                 footerMessage={appSettings.receiptFooter}
               />
               

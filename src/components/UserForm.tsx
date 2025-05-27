@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import type { User as AppUser, UserRole } from '@/types'; 
-import { USER_ROLES } from '@/types';
+import { USER_ROLES } from '@/types'; // Ensure USER_ROLES is imported from types
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,7 +38,7 @@ interface UserFormProps {
 const defaultUserBase: Omit<AppUser, 'id' | 'pin' > = {
   name: '',
   email: '',
-  role: 'Staff', 
+  role: USER_ROLES[0], // Default to the first role in the list
   isActive: true,
 };
 

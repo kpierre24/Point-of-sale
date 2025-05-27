@@ -2,13 +2,16 @@
 "use client";
 
 import React from 'react';
-import type { SoldProduct } from '@/types';
+import type { SoldProduct, AppSettings } from '@/types';
 import { APP_TITLE as DEFAULT_APP_TITLE } from '@/config/constants';
 import { format } from 'date-fns';
 
 interface ReceiptProps {
   sale: SoldProduct;
   storeName?: string;
+  storeAddress?: string;
+  storePhone?: string;
+  storeWebsite?: string;
   footerMessage?: string;
 }
 
@@ -17,13 +20,24 @@ const formatCurrency = (amount: number) => {
 };
 
 export const Receipt = React.forwardRef<HTMLDivElement, ReceiptProps>(
-  ({ sale, storeName = DEFAULT_APP_TITLE, footerMessage = "Thank you for your purchase!" }, ref) => {
+  (
+    { 
+      sale, 
+      storeName = DEFAULT_APP_TITLE, 
+      storeAddress,
+      storePhone,
+      storeWebsite,
+      footerMessage = "Thank you for your purchase!" 
+    }, ref
+  ) => {
   return (
     <div ref={ref} className="p-6 bg-background text-foreground font-mono text-sm printable-receipt-content">
       <header className="text-center mb-6">
         <h1 className="text-2xl font-bold">{storeName}</h1>
-        {/* Add store address/phone here if available in future */}
-        <p className="text-xs">Date: {format(new Date(sale.timestamp), 'MMM dd, yyyy HH:mm:ss')}</p>
+        {storeAddress && <p className="text-xs">{storeAddress}</p>}
+        {storePhone && <p className="text-xs">Phone: {storePhone}</p>}
+        {storeWebsite && <p className="text-xs">{storeWebsite}</p>}
+        <p className="text-xs mt-1">Date: {format(new Date(sale.timestamp), 'MMM dd, yyyy HH:mm:ss')}</p>
         <p className="text-xs">Receipt ID: {sale.id.substring(0, 8)}...</p>
         {sale.staffName && <p className="text-xs">Served by: {sale.staffName}</p>}
       </header>
