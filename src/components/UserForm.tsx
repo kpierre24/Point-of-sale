@@ -83,16 +83,22 @@ export function UserForm({ isOpen, onOpenChange, onSave, userToEdit }: UserFormP
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!user.name.trim() || !user.email.trim()) {
-      toast({ title: 'Invalid Input', description: 'Name and email cannot be empty.', variant: 'destructive' });
+      setTimeout(() => {
+        toast({ title: 'Invalid Input', description: 'Name and email cannot be empty.', variant: 'destructive' });
+      }, 0);
       return;
     }
     if (!/\S+@\S+\.\S+/.test(user.email)) {
-      toast({ title: 'Invalid Email', description: 'Please enter a valid email address.', variant: 'destructive' });
+      setTimeout(() => {
+        toast({ title: 'Invalid Email', description: 'Please enter a valid email address.', variant: 'destructive' });
+      }, 0);
       return;
     }
     
     if (pin && !/^\d{6}$/.test(pin)) {
-      toast({ title: 'Invalid PIN', description: 'PIN must be 6 digits if set.', variant: 'destructive' });
+      setTimeout(() => {
+        toast({ title: 'Invalid PIN', description: 'PIN must be 6 digits if set.', variant: 'destructive' });
+      }, 0);
       return;
     }
 
@@ -112,7 +118,7 @@ export function UserForm({ isOpen, onOpenChange, onSave, userToEdit }: UserFormP
         <DialogHeader>
           <DialogTitle>{userToEdit ? 'Edit Staff User' : 'Add New Staff User'}</DialogTitle>
           <DialogDescription>
-            {userToEdit ? 'Update the details of this staff member.' : 'Fill in the details to add a new staff member. PIN will be set or auto-generated.'}
+            {userToEdit ? 'Update the details of this staff member.' : 'Fill in the details to add a new staff member. PIN will be set or auto-generated if left blank.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
