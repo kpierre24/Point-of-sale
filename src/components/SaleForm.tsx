@@ -2,12 +2,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { SoldProduct, Product, PaymentMethod, TopUpCard } from "@/types";
+import type { SoldProduct, Product, PaymentMethod, TopUpCard, AppSettings } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
-import { TAX_RATE, PAYMENT_METHODS } from "@/config/constants";
+import { TAX_RATE as DEFAULT_TAX_RATE, PAYMENT_METHODS } from "@/config/constants";
 import { suggestProductDetails, type SuggestProductDetailsInput } from '@/ai/flows/suggest-product-details';
 import { Lightbulb, PlusSquare, Loader2, PackageSearch, ScanLine, CreditCard, CheckCircle, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +22,7 @@ import {
 import QRCodeScannerComponent from '@/components/topup-cards/QRCodeScannerComponent'; // For scanning payment card
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
+const APP_SETTINGS_KEY = 'appSettings';
 
 interface SaleFormProps {
   onRecordSale: (saleData: Omit<SoldProduct, "id" | "timestamp" | "staffId" | "staffName">) => void;
@@ -47,6 +48,8 @@ export function SaleForm({
   const [subtotal, setSubtotal] = useState(0);
   const [taxAmount, setTaxAmount] = useState(0);
   const [total, setTotal] = useState(0);
+  const [currentTaxRate, setCurrentTaxRate] = useState(DEFAULT_TAX_RATE);
+
 
   const [isSuggesting, setIsSuggesting] = useState(false);
   const { toast } = useToast();
@@ -55,6 +58,30 @@ export function SaleForm({
   const [paymentCardIdInput, setPaymentCardIdInput] = useState('');
   const [verifiedPaymentCard, setVerifiedPaymentCard] = useState<TopUpCard | null>(null);
   const [isScanningPaymentCard, setIsScanningPaymentCard] = useState(false);
+
+  useEffect(() => {
+    const storedSettings = localStorage.getItem(APP_SETTINGS_KEY);
+    if (storedSettings) {
+      try {
+        const parsedSettings: AppSettings = JSON.parse(storedSettings);
+        if (parsedSettings.taxRate !== undefined) {
+          const rate = parseFloat(parsedSettings.taxRate);
+          if (!isNaN(rate) && rate >= 0 && rate <= 100) {
+            setCurrentTaxRate(rate / 100);
+          } else {
+            setCurrentTaxRate(DEFAULT_TAX_RATE);
+          }
+        } else {
+          setCurrentTaxRate(DEFAULT_TAX_RATE);
+        }
+      } catch (e) {
+        console.error("Failed to parse tax rate from settings", e);
+        setCurrentTaxRate(DEFAULT_TAX_RATE);
+      }
+    } else {
+        setCurrentTaxRate(DEFAULT_TAX_RATE);
+    }
+  }, []);
 
 
   const formatCurrency = (amount: number) => {
@@ -67,7 +94,7 @@ export function SaleForm({
 
     if (numQuantity > 0 && numPrice > 0) {
       const currentSubtotal = numPrice * numQuantity;
-      const currentTaxAmount = currentSubtotal * TAX_RATE;
+      const currentTaxAmount = currentSubtotal * currentTaxRate; // Use dynamic tax rate
       const currentTotal = currentSubtotal + currentTaxAmount;
       setSubtotal(currentSubtotal);
       setTaxAmount(currentTaxAmount);
@@ -77,11 +104,11 @@ export function SaleForm({
       setTaxAmount(0);
       setTotal(0);
     }
-  }, [quantity, price]);
+  }, [quantity, price, currentTaxRate]);
 
   useEffect(() => {
     calculateTotals();
-  }, [quantity, price, calculateTotals]);
+  }, [quantity, price, currentTaxRate, calculateTotals]);
 
   useEffect(() => {
     // Reset card verification if payment method changes from Top-Up Card
@@ -170,8 +197,11 @@ export function SaleForm({
       return;
     }
 
+    const productInStock = availableProducts.find(p => p.id === selectedProductId);
+    const costOfGoodsSold = productInStock?.costOfGoodsSold;
+
+
     if (selectedProductId) {
-      const productInStock = availableProducts.find(p => p.id === selectedProductId);
       if (productInStock && productInStock.stockQuantity < numQuantity) {
         toast({ title: "Insufficient Stock", description: `Only ${productInStock.stockQuantity} of ${productName} available.`, variant: "destructive" });
         return;
@@ -210,6 +240,7 @@ export function SaleForm({
         taxAmount, 
         total, 
         productId: selectedProductId,
+        costOfGoodsSoldAtTimeOfSale: costOfGoodsSold,
         paymentMethod: paymentMethod,
         cardIdUsed: cardIdUsedForSale,
     });
@@ -372,7 +403,7 @@ export function SaleForm({
                   </AlertTitle>
                   <AlertDescription>
                     Balance: {formatCurrency(verifiedPaymentCard.currentBalance)}. 
-                    {total > verifiedPaymentCard.currentBalance && ` Sale total ${formatCurrency(total)} exceeds balance.`}
+                    {total > verifiedPaymentCard.currentBalance && ` Sale total ${formatCurrency(total)} exceeds card balance.`}
                   </AlertDescription>
                   <Button variant="link" size="sm" className="p-0 h-auto mt-1" onClick={() => { setVerifiedPaymentCard(null); setPaymentCardIdInput('');}}>
                     Use different card
@@ -390,7 +421,7 @@ export function SaleForm({
               <span className="font-medium">{formatCurrency(subtotal)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span>Tax ({TAX_RATE * 100}%):</span>
+              <span>Tax ({ (currentTaxRate * 100).toFixed(2) }%):</span>
               <span className="font-medium">{formatCurrency(taxAmount)}</span>
             </div>
             <div className="flex justify-between text-lg font-semibold">

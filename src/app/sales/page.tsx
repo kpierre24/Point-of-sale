@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { SoldProduct, Product, TopUpCard, CardTransaction } from "@/types"; 
+import type { SoldProduct, Product, TopUpCard, CardTransaction, AppSettings } from "@/types"; 
 import { SaleForm } from "@/components/SaleForm";
 import { SalesHistoryTable } from "@/components/SalesHistoryTable";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -20,15 +20,18 @@ import {
 } from "@/components/ui/dialog";
 import { useReactToPrint } from 'react-to-print';
 import { useToast } from "@/hooks/use-toast";
+import { APP_TITLE as DEFAULT_APP_TITLE } from "@/config/constants";
 
 const TOPUP_CARDS_STORAGE_KEY = 'topUpCardsData';
 const CARD_TRANSACTIONS_STORAGE_KEY = 'cardTransactionsData';
+const APP_SETTINGS_KEY = 'appSettings';
 
 export default function SalesPage() {
   const [soldItems, setSoldItems] = useState<SoldProduct[]>([]);
   const [products, setProducts] = useState<Product[]>([]); 
   const [topUpCards, setTopUpCards] = useState<TopUpCard[]>([]);
   const [cardTransactions, setCardTransactions] = useState<CardTransaction[]>([]);
+  const [appSettings, setAppSettings] = useState<Partial<AppSettings>>({});
   
   const [isMounted, setIsMounted] = useState(false);
   const [receiptData, setReceiptData] = useState<SoldProduct | null>(null);
@@ -56,6 +59,11 @@ export default function SalesPage() {
     if (storedCardTransactions) {
       try { setCardTransactions(JSON.parse(storedCardTransactions)); }
       catch (e) { console.error("Failed to parse cardTransactions", e); setCardTransactions([]);}
+    }
+    const storedAppSettings = localStorage.getItem(APP_SETTINGS_KEY);
+    if (storedAppSettings) {
+      try { setAppSettings(JSON.parse(storedAppSettings)); }
+      catch(e) { console.error("Failed to parse app settings", e); setAppSettings({}); }
     }
   }, []);
 
@@ -94,6 +102,7 @@ export default function SalesPage() {
       ...newSaleData,
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
+      // staffId and staffName would be set here if user authentication was in place
     };
     setSoldItems((prevItems) => [newSale, ...prevItems]);
 
@@ -130,45 +139,56 @@ export default function SalesPage() {
   }, [topUpCards]);
 
   const deductFromCardBalance = useCallback((cardId: string, amountToDeduct: number, notes: string): boolean => {
-    const cardToUpdate = topUpCards.find(c => c.cardId.toUpperCase() === cardId.toUpperCase());
+    let success = false;
+    setTopUpCards(prevCards => {
+        const cardIndex = prevCards.findIndex(c => c.cardId.toUpperCase() === cardId.toUpperCase());
+        if (cardIndex === -1) {
+            toast({ title: 'Card Not Found', description: `Card ${cardId} not found for deduction.`, variant: 'destructive' });
+            success = false;
+            return prevCards;
+        }
 
-    if (!cardToUpdate) {
-      toast({ title: 'Card Not Found', description: `Card ${cardId} not found for deduction.`, variant: 'destructive' });
-      return false;
-    }
+        const cardToUpdate = prevCards[cardIndex];
 
-    if (cardToUpdate.currentBalance < amountToDeduct) {
-      toast({ title: 'Insufficient Balance', description: `Card ${cardId} has only ${formatCurrency(cardToUpdate.currentBalance)}. Deduction of ${formatCurrency(amountToDeduct)} failed.`, variant: 'destructive' });
-      return false;
-    }
+        if (cardToUpdate.currentBalance < amountToDeduct) {
+            toast({ title: 'Insufficient Balance', description: `Card ${cardId} has only ${formatCurrency(cardToUpdate.currentBalance)}. Deduction of ${formatCurrency(amountToDeduct)} failed.`, variant: 'destructive' });
+            success = false;
+            return prevCards;
+        }
 
-    const newBalance = cardToUpdate.currentBalance - amountToDeduct;
-    const now = new Date().toISOString();
+        const newBalance = cardToUpdate.currentBalance - amountToDeduct;
+        const now = new Date().toISOString();
 
-    const updatedCardData: TopUpCard = {
-      ...cardToUpdate,
-      currentBalance: newBalance,
-      lastUpdatedAt: now,
-    };
+        const updatedCardData: TopUpCard = {
+            ...cardToUpdate,
+            currentBalance: newBalance,
+            lastUpdatedAt: now,
+        };
+        
+        const updatedCards = [...prevCards];
+        updatedCards[cardIndex] = updatedCardData;
 
-    const newTransaction: CardTransaction = {
-      id: crypto.randomUUID(),
-      cardId: cardToUpdate.cardId, // Use the cardId from the found card
-      timestamp: now,
-      type: 'Purchase',
-      amount: -amountToDeduct,
-      balanceBefore: cardToUpdate.currentBalance,
-      balanceAfter: newBalance,
-      staffMember: 'Staff User', // Placeholder
-      notes,
-    };
+        const newTransaction: CardTransaction = {
+            id: crypto.randomUUID(),
+            cardId: cardToUpdate.cardId,
+            timestamp: now,
+            type: 'Purchase',
+            amount: -amountToDeduct,
+            balanceBefore: cardToUpdate.currentBalance,
+            balanceAfter: newBalance,
+            staffMember: 'Staff User', // Placeholder
+            notes,
+        };
+        
+        // Add transaction separately to avoid issues with React state updates
+        setCardTransactions(prevTx => [newTransaction, ...prevTx]);
 
-    setTopUpCards(prevCards => prevCards.map(c => (c.id === updatedCardData.id ? updatedCardData : c)));
-    setCardTransactions(prevTx => [newTransaction, ...prevTx]);
-
-    toast({ title: 'Card Payment Processed', description: `${formatCurrency(amountToDeduct)} deducted from card ${cardToUpdate.cardId}.` });
-    return true;
-  }, [topUpCards, toast]); // Removed setTopUpCards, setCardTransactions as direct dependencies (they are stable)
+        toast({ title: 'Card Payment Processed', description: `${formatCurrency(amountToDeduct)} deducted from card ${cardToUpdate.cardId}.` });
+        success = true;
+        return updatedCards;
+    });
+    return success;
+  }, [toast]);
 
 
   if (!isMounted) {
@@ -226,7 +246,12 @@ export default function SalesPage() {
                 </ReceiptDialogDescription>
               </DialogHeader>
               
-              <Receipt ref={receiptComponentRef} sale={receiptData} />
+              <Receipt 
+                ref={receiptComponentRef} 
+                sale={receiptData}
+                storeName={appSettings.storeName || DEFAULT_APP_TITLE}
+                footerMessage={appSettings.receiptFooter}
+              />
               
               <DialogFooter className="pt-4 mt-2 border-t no-print">
                 <DialogClose asChild>

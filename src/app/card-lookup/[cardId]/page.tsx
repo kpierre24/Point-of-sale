@@ -3,11 +3,11 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import type { TopUpCard, CardTransaction, Customer } from '@/types';
+import type { TopUpCard, CardTransaction, Customer, AppSettings } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { APP_TITLE } from '@/config/constants';
+import { APP_TITLE as DEFAULT_APP_TITLE } from '@/config/constants';
 import { AlertTriangle, Info, Loader2, History, UserCircle, Wallet } from 'lucide-react';
 import { format } from 'date-fns';
 import Link from 'next/link';
@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 const TOPUP_CARDS_STORAGE_KEY = 'topUpCardsData';
 const CARD_TRANSACTIONS_STORAGE_KEY = 'cardTransactionsData';
 const CUSTOMERS_STORAGE_KEY = 'customers';
+const APP_SETTINGS_KEY = 'appSettings';
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 const formatDate = (isoString: string) => format(new Date(isoString), 'MMM dd, yyyy HH:mm');
@@ -30,9 +31,26 @@ export default function CardLookupPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const [appTitle, setAppTitle] = useState(DEFAULT_APP_TITLE);
 
   useEffect(() => {
     setIsMounted(true);
+    const storedSettings = localStorage.getItem(APP_SETTINGS_KEY);
+    if (storedSettings) {
+      try {
+        const parsedSettings: AppSettings = JSON.parse(storedSettings);
+        if (parsedSettings.storeName) {
+          setAppTitle(parsedSettings.storeName);
+          document.title = `Card Lookup - ${parsedSettings.storeName}`;
+        } else {
+           document.title = `Card Lookup - ${DEFAULT_APP_TITLE}`;
+        }
+      } catch (e) { 
+        document.title = `Card Lookup - ${DEFAULT_APP_TITLE}`;
+      }
+    } else {
+      document.title = `Card Lookup - ${DEFAULT_APP_TITLE}`;
+    }
   }, []);
 
   useEffect(() => {
@@ -104,7 +122,7 @@ export default function CardLookupPage() {
         <CardContent>
           <p className="mb-4">{error}</p>
           <Link href="/" passHref>
-            <Button variant="outline">Go to Homepage</Button>
+            <Button variant="outline">Return to {appTitle}</Button>
           </Link>
         </CardContent>
       </Card>
@@ -112,7 +130,6 @@ export default function CardLookupPage() {
   }
 
   if (!card) {
-     // This case should ideally be covered by the error state if cardIdParam was valid but not found
     return (
       <Card className="shadow-lg">
         <CardHeader>
@@ -123,7 +140,7 @@ export default function CardLookupPage() {
         <CardContent>
           <p>No card information to display. This might happen if the card ID is incorrect or missing.</p>
            <Link href="/" passHref>
-            <Button variant="outline" className="mt-4">Go to Homepage</Button>
+            <Button variant="outline" className="mt-4">Return to {appTitle}</Button>
           </Link>
         </CardContent>
       </Card>
@@ -133,7 +150,7 @@ export default function CardLookupPage() {
   return (
     <div className="space-y-6">
       <header className="text-center mb-8">
-        <h1 className="text-4xl font-bold tracking-tight text-primary">{APP_TITLE}</h1>
+        <h1 className="text-4xl font-bold tracking-tight text-primary">{appTitle}</h1>
         <p className="text-xl text-muted-foreground">Top-Up Card Statement</p>
       </header>
 
@@ -211,7 +228,7 @@ export default function CardLookupPage() {
       </Card>
        <div className="text-center mt-8">
           <Link href="/" passHref>
-            <Button variant="outline">Return to POS Pro</Button>
+            <Button variant="outline">Return to {appTitle}</Button>
           </Link>
         </div>
     </div>

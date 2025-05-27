@@ -1,21 +1,23 @@
 // src/components/Receipt.tsx
 "use client";
 
-import React from 'react'; // Changed from type import to regular import
+import React from 'react';
 import type { SoldProduct } from '@/types';
-import { APP_TITLE } from '@/config/constants';
+import { APP_TITLE as DEFAULT_APP_TITLE } from '@/config/constants';
 import { format } from 'date-fns';
 
 interface ReceiptProps {
   sale: SoldProduct;
   storeName?: string;
+  footerMessage?: string;
 }
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 };
 
-export const Receipt = React.forwardRef<HTMLDivElement, ReceiptProps>(({ sale, storeName = APP_TITLE }, ref) => {
+export const Receipt = React.forwardRef<HTMLDivElement, ReceiptProps>(
+  ({ sale, storeName = DEFAULT_APP_TITLE, footerMessage = "Thank you for your purchase!" }, ref) => {
   return (
     <div ref={ref} className="p-6 bg-background text-foreground font-mono text-sm printable-receipt-content">
       <header className="text-center mb-6">
@@ -23,6 +25,7 @@ export const Receipt = React.forwardRef<HTMLDivElement, ReceiptProps>(({ sale, s
         {/* Add store address/phone here if available in future */}
         <p className="text-xs">Date: {format(new Date(sale.timestamp), 'MMM dd, yyyy HH:mm:ss')}</p>
         <p className="text-xs">Receipt ID: {sale.id.substring(0, 8)}...</p>
+        {sale.staffName && <p className="text-xs">Served by: {sale.staffName}</p>}
       </header>
 
       <section className="mb-4">
@@ -37,8 +40,6 @@ export const Receipt = React.forwardRef<HTMLDivElement, ReceiptProps>(({ sale, s
             </tr>
           </thead>
           <tbody>
-            {/* Assuming SoldProduct might be expanded to include multiple items in a single transaction in the future.
-                For now, a "sale" represents one type of product. This structure allows for future expansion. */}
             <tr key={sale.id}>
               <td className="pt-1">{sale.quantity}</td>
               <td className="pt-1">{sale.name}</td>
@@ -66,10 +67,16 @@ export const Receipt = React.forwardRef<HTMLDivElement, ReceiptProps>(({ sale, s
           <span>Payment Method:</span>
           <span>{sale.paymentMethod}</span>
         </div>
+         {sale.cardIdUsed && (
+          <div className="flex justify-between text-xs">
+            <span>Card ID Used:</span>
+            <span>{sale.cardIdUsed}</span>
+          </div>
+        )}
       </section>
 
       <footer className="text-center">
-        <p>Thank you for your purchase!</p>
+        <p>{footerMessage}</p>
         {/* Add return policy or other messages here */}
       </footer>
     </div>

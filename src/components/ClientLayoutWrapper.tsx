@@ -2,6 +2,7 @@
 "use client";
 
 import type React from 'react';
+import { useState, useEffect } from 'react'; // Added useState, useEffect
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -16,7 +17,8 @@ import {
   SidebarInset,
   SidebarFooter,
 } from '@/components/ui/sidebar';
-import { APP_TITLE } from '@/config/constants';
+import { APP_TITLE as DEFAULT_APP_TITLE } from '@/config/constants'; // Renamed for clarity
+import type { AppSettings } from '@/types';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -28,9 +30,8 @@ import {
   Settings as SettingsIcon, 
   Home,
   FileText,
-  CreditCard, // Added CreditCard icon
+  CreditCard,
 } from 'lucide-react';
-// Removed LogOut, UserCircle2, Avatar, Skeleton, useAuth
 
 interface NavItem {
   href: string;
@@ -46,7 +47,7 @@ const navItems: NavItem[] = [
   { href: '/recipes', icon: ClipboardList, label: 'Recipes', tooltip: 'Manage Product Recipes/Builds' },
   { href: '/purchases', icon: Truck, label: 'Purchases', tooltip: 'Manage Stock Purchases' },
   { href: '/customers', icon: Users, label: 'Customers', tooltip: 'Manage Customers' },
-  { href: '/topup-cards', icon: CreditCard, label: 'Top-Up Cards', tooltip: 'Manage Customer Top-Up Cards' }, // Added Top-Up Cards
+  { href: '/topup-cards', icon: CreditCard, label: 'Top-Up Cards', tooltip: 'Manage Customer Top-Up Cards' },
   { href: '/reports', icon: FileText, label: 'Reports', tooltip: 'View Business Reports' },
   { href: '/users', icon: UserCog, label: 'Staff', tooltip: 'Manage Staff Users' },
 ];
@@ -55,10 +56,55 @@ const settingsNavItems: NavItem[] = [
  { href: '/settings', icon: SettingsIcon, label: 'Settings', tooltip: 'Application Settings' },
 ];
 
+const APP_SETTINGS_KEY = 'appSettings';
+
 export function ClientLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const [appTitle, setAppTitle] = useState(DEFAULT_APP_TITLE);
 
-  // Removed auth-related useEffect and loading checks
+  useEffect(() => {
+    // Apply dark mode and set app title from localStorage on initial client load
+    const storedSettings = localStorage.getItem(APP_SETTINGS_KEY);
+    if (storedSettings) {
+      try {
+        const parsedSettings: AppSettings = JSON.parse(storedSettings);
+        if (parsedSettings.storeName) {
+          setAppTitle(parsedSettings.storeName);
+        }
+        if (parsedSettings.darkMode) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      } catch (e) {
+        console.error("Failed to parse settings in ClientLayoutWrapper", e);
+        setAppTitle(DEFAULT_APP_TITLE); // Fallback
+        document.documentElement.classList.remove('dark'); // Fallback
+      }
+    } else {
+        // No settings stored, use defaults
+        setAppTitle(DEFAULT_APP_TITLE);
+        document.documentElement.classList.remove('dark');
+    }
+
+    // Listen for changes to settings from other tabs/windows (optional but good practice)
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === APP_SETTINGS_KEY && event.newValue) {
+        try {
+            const newSettings: AppSettings = JSON.parse(event.newValue);
+            if (newSettings.storeName) setAppTitle(newSettings.storeName);
+            if (newSettings.darkMode) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        } catch(e) { console.error("Error processing storage change", e); }
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+
+  }, [pathname]); // Re-check on pathname change if settings might have been updated on another page
 
   return (
     <SidebarProvider defaultOpen>
@@ -68,7 +114,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
             <Link href="/dashboard" className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
               <Home className="h-6 w-6 text-primary" />
               <h2 className="text-lg font-semibold tracking-tight text-primary">
-                {APP_TITLE}
+                {appTitle}
               </h2>
             </Link>
             <SidebarTrigger className="group-data-[collapsible=icon]:hidden md:flex" />
@@ -93,7 +139,6 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
               </SidebarMenuItem>
             ))}
           </SidebarMenu>
-          {/* User Profile Section removed */}
         </SidebarContent>
         <SidebarFooter className="p-2 border-t">
            <SidebarMenu>
@@ -113,7 +158,6 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
                 </Link>
               </SidebarMenuItem>
             ))}
-             {/* LogOut button removed */}
           </SidebarMenu>
         </SidebarFooter>
       </Sidebar>
@@ -122,7 +166,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
             <SidebarTrigger />
              <Link href="/dashboard" className="flex items-center gap-2">
                 <Home className="h-5 w-5 text-primary" />
-                <h2 className="text-md font-semibold tracking-tight text-primary">{APP_TITLE}</h2>
+                <h2 className="text-md font-semibold tracking-tight text-primary">{appTitle}</h2>
             </Link>
         </header>
         <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/40 min-h-[calc(100vh-3.5rem)] md:min-h-screen">

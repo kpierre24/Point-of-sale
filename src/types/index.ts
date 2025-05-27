@@ -65,6 +65,7 @@ export interface SoldProduct {
   total: number;
   timestamp: string; 
   productId?: string; 
+  costOfGoodsSoldAtTimeOfSale?: number; // Added for P&L
   customerId?: string; 
   paymentMethod: PaymentMethod;
   staffId?: string; // Optional: ID of the staff member
@@ -118,4 +119,12 @@ export interface CardTransaction {
   balanceAfter: number;
   staffMember?: string; // Name or ID of staff, optional
   notes?: string;
+}
+
+// App Settings
+export interface AppSettings {
+  storeName: string;
+  taxRate: string; // Stored as string, e.g., "10" for 10%
+  receiptFooter: string;
+  darkMode: boolean;
 }
