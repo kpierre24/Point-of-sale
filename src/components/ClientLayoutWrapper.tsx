@@ -1,3 +1,4 @@
+
 // src/components/ClientLayoutWrapper.tsx
 "use client";
 
@@ -21,7 +22,7 @@ import {
 import { APP_TITLE as DEFAULT_APP_TITLE } from '@/config/constants';
 import type { AppSettings } from '@/types';
 import { db } from '@/lib/firebase'; // Added
-import { doc, getDoc } from 'firebase/firestore'; // Added
+import { doc, getDoc, onSnapshot } from 'firebase/firestore'; // Added onSnapshot
 import { useToast } from '@/hooks/use-toast'; // Added
 import {
   LayoutDashboard,
@@ -35,7 +36,8 @@ import {
   Home,
   FileText,
   CreditCard,
-  Loader2, // Added
+  Loader2, 
+  Database // Added Database icon for migration
 } from 'lucide-react';
 
 interface NavItem {
@@ -43,6 +45,7 @@ interface NavItem {
   icon: React.ElementType;
   label: string;
   tooltip: string;
+  devOnly?: boolean; // Added for temporary links
 }
 
 const navItems: NavItem[] = [
@@ -59,10 +62,12 @@ const navItems: NavItem[] = [
 
 const settingsNavItems: NavItem[] = [
  { href: '/settings', icon: SettingsIcon, label: 'Settings', tooltip: 'Application Settings' },
+ // Temporary link for migration - REMOVE AFTER USE
+ { href: '/migrate-data', icon: Database, label: 'Migrate Data (Dev)', tooltip: 'Migrate Local Storage to Firestore', devOnly: true },
 ];
 
-const APP_SETTINGS_DOC_ID = 'current'; // Document ID for app settings in Firestore
-const queryClient = new QueryClient(); // Create a client
+const APP_SETTINGS_DOC_ID = 'current'; 
+const queryClient = new QueryClient(); 
 
 export function ClientLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -71,61 +76,51 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
   const { toast } = useToast();
 
   useEffect(() => {
-    const fetchAppSettings = async () => {
-      setIsSettingsLoading(true);
-      if (!db) {
-        console.warn("Firestore not available. Using default settings.");
-        toast({
-          title: "Firebase Not Connected",
-          description: "App settings could not be loaded. Using defaults. Please check Firebase configuration.",
-          variant: "destructive",
-          duration: 10000,
-        });
-        setAppTitle(DEFAULT_APP_TITLE);
-        document.documentElement.classList.remove('dark');
-        setIsSettingsLoading(false);
-        return;
-      }
+    if (!db) {
+      console.warn("Firestore not available. Using default settings.");
+      toast({
+        title: "Firebase Not Connected",
+        description: "App settings could not be loaded. Using defaults.",
+        variant: "destructive",
+        duration: 10000,
+      });
+      setAppTitle(DEFAULT_APP_TITLE);
+      document.documentElement.classList.remove('dark');
+      setIsSettingsLoading(false);
+      return;
+    }
 
-      try {
-        const settingsDocRef = doc(db, 'appSettings', APP_SETTINGS_DOC_ID);
-        const docSnap = await getDoc(settingsDocRef);
-
-        if (docSnap.exists()) {
-          const loadedSettings = docSnap.data() as AppSettings;
-          if (loadedSettings.storeName) {
-            setAppTitle(loadedSettings.storeName);
-          } else {
-            setAppTitle(DEFAULT_APP_TITLE);
-          }
-          if (loadedSettings.darkMode) {
-            document.documentElement.classList.add('dark');
-          } else {
-            document.documentElement.classList.remove('dark');
-          }
+    setIsSettingsLoading(true);
+    const settingsDocRef = doc(db, 'appSettings', APP_SETTINGS_DOC_ID);
+    
+    const unsubscribe = onSnapshot(settingsDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const loadedSettings = docSnap.data() as AppSettings;
+        setAppTitle(loadedSettings.storeName || DEFAULT_APP_TITLE);
+        if (loadedSettings.darkMode) {
+          document.documentElement.classList.add('dark');
         } else {
-          // No settings in Firestore, use defaults
-          setAppTitle(DEFAULT_APP_TITLE);
           document.documentElement.classList.remove('dark');
         }
-      } catch (error) {
-        console.error("Error fetching app settings from Firestore:", error);
-        toast({
-          title: "Error Loading Settings",
-          description: "Could not load app settings from Firestore. Using defaults.",
-          variant: "destructive",
-        });
+      } else {
         setAppTitle(DEFAULT_APP_TITLE);
         document.documentElement.classList.remove('dark');
-      } finally {
-        setIsSettingsLoading(false);
       }
-    };
+      setIsSettingsLoading(false);
+    }, (error) => {
+      console.error("Error fetching app settings from Firestore:", error);
+      toast({
+        title: "Error Loading Settings",
+        description: "Could not load app settings. Using defaults.",
+        variant: "destructive",
+      });
+      setAppTitle(DEFAULT_APP_TITLE);
+      document.documentElement.classList.remove('dark');
+      setIsSettingsLoading(false);
+    });
 
-    fetchAppSettings();
-    // Consider adding a listener for Firestore settings changes if real-time updates are needed across tabs
-    // For now, settings are primarily managed on the /settings page and re-fetched on navigation/reload.
-  }, [pathname, toast]); // Re-fetch on pathname change to reflect potential updates from settings page
+    return () => unsubscribe(); // Cleanup listener on component unmount
+  }, [toast]);
 
 
   return (
@@ -170,20 +165,23 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
           <SidebarFooter className="p-2 border-t">
             <SidebarMenu>
               {settingsNavItems.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <Link href={item.href} legacyBehavior passHref>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={pathname.startsWith(item.href)}
-                      tooltip={item.tooltip}
-                    >
-                      <a>
-                        <item.icon />
-                        <span>{item.label}</span>
-                      </a>
-                    </SidebarMenuButton>
-                  </Link>
-                </SidebarMenuItem>
+                 (item.devOnly && process.env.NODE_ENV !== 'development') ? null : (
+                    <SidebarMenuItem key={item.href}>
+                    <Link href={item.href} legacyBehavior passHref>
+                        <SidebarMenuButton
+                        asChild
+                        isActive={pathname.startsWith(item.href)}
+                        tooltip={item.tooltip}
+                        className={item.devOnly ? 'text-yellow-500 hover:text-yellow-600 hover:bg-yellow-500/10' : ''}
+                        >
+                        <a>
+                            <item.icon />
+                            <span>{item.label}</span>
+                        </a>
+                        </SidebarMenuButton>
+                    </Link>
+                    </SidebarMenuItem>
+                 )
               ))}
             </SidebarMenu>
           </SidebarFooter>
@@ -208,3 +206,4 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
     </QueryClientProvider>
   );
 }
+
