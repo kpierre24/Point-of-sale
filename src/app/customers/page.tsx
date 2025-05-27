@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import type { Customer } from '@/types';
+import type { Customer, TopUpCard } from '@/types'; // Added TopUpCard
 import { Button } from '@/components/ui/button';
 import { CustomerForm } from '@/components/CustomerForm';
 import {
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { UserPlus, Edit, Trash2, Search, ShoppingBag } from 'lucide-react';
+import { UserPlus, Edit, Trash2, Search, ShoppingBag, CreditCard } from 'lucide-react'; // Added CreditCard
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import {
@@ -31,8 +31,12 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+const CUSTOMERS_STORAGE_KEY = 'customers';
+const TOPUP_CARDS_STORAGE_KEY = 'topUpCardsData';
+
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [topUpCards, setTopUpCards] = useState<TopUpCard[]>([]); // Added state for top-up cards
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [customerToEdit, setCustomerToEdit] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -41,7 +45,7 @@ export default function CustomersPage() {
 
   useEffect(() => {
     setIsMounted(true);
-    const storedCustomers = localStorage.getItem('customers');
+    const storedCustomers = localStorage.getItem(CUSTOMERS_STORAGE_KEY);
     if (storedCustomers) {
       try {
         setCustomers(JSON.parse(storedCustomers));
@@ -50,15 +54,43 @@ export default function CustomersPage() {
         setCustomers([]);
       }
     }
+    const storedTopUpCards = localStorage.getItem(TOPUP_CARDS_STORAGE_KEY);
+    if (storedTopUpCards) {
+      try {
+        setTopUpCards(JSON.parse(storedTopUpCards));
+      } catch (e) {
+        console.error("Failed to parse top-up cards from localStorage", e);
+        setTopUpCards([]);
+      }
+    }
   }, []);
 
   useEffect(() => {
     if (isMounted) {
-      localStorage.setItem('customers', JSON.stringify(customers));
+      localStorage.setItem(CUSTOMERS_STORAGE_KEY, JSON.stringify(customers));
     }
   }, [customers, isMounted]);
 
+  useEffect(() => {
+    if (isMounted) {
+      localStorage.setItem(TOPUP_CARDS_STORAGE_KEY, JSON.stringify(topUpCards));
+    }
+  }, [topUpCards, isMounted]);
+
+  const generateNewCardId = (): string => {
+    let newId = '';
+    let attempts = 0;
+    const existingCardIds = topUpCards.map(c => c.cardId.toUpperCase());
+    do {
+      newId = `CARD-${Date.now().toString().slice(-4)}${Math.random().toString().slice(2, 6)}`;
+      attempts++;
+    } while (existingCardIds.includes(newId.toUpperCase()) && attempts < 10);
+    if (attempts >= 10) return `CARD-ERR${crypto.randomUUID().slice(0,4)}`; // fallback
+    return newId.toUpperCase();
+  };
+
   const handleSaveCustomer = (customer: Customer) => {
+    let isNewCustomer = false;
     setCustomers((prevCustomers) => {
       const existingIndex = prevCustomers.findIndex((c) => c.id === customer.id);
       if (existingIndex > -1) {
@@ -67,10 +99,35 @@ export default function CustomersPage() {
         toast({ title: 'Customer Updated', description: `${customer.name} has been updated.` });
         return updatedCustomers;
       } else {
+        isNewCustomer = true;
         toast({ title: 'Customer Added', description: `${customer.name} has been added to your database.` });
         return [customer, ...prevCustomers];
       }
     });
+
+    if (isNewCustomer) {
+      const newCardId = generateNewCardId();
+      const now = new Date().toISOString();
+      const newTopUpCard: TopUpCard = {
+        id: crypto.randomUUID(),
+        cardId: newCardId,
+        customerId: customer.id,
+        currentBalance: 0,
+        qrCodeValue: newCardId,
+        createdAt: now,
+        lastUpdatedAt: now,
+      };
+      setTopUpCards(prevCards => [newTopUpCard, ...prevCards]);
+      toast({
+        title: 'Top-Up Card Created',
+        description: (
+          <div className="flex items-center">
+            <CreditCard className="mr-2 h-4 w-4" />
+            <span>Top-Up Card {newTopUpCard.cardId} created for {customer.name}.</span>
+          </div>
+        ),
+      });
+    }
     setCustomerToEdit(null);
   };
 
@@ -86,6 +143,8 @@ export default function CustomersPage() {
 
   const handleDeleteCustomer = (customerId: string) => {
     const customerName = customers.find(c => c.id === customerId)?.name || "The customer";
+    // Consider what to do with linked top-up cards upon customer deletion (e.g., deactivate, orphan, or delete)
+    // For now, cards are not deleted with customers.
     setCustomers((prevCustomers) => prevCustomers.filter((c) => c.id !== customerId));
     toast({ title: 'Customer Deleted', description: `${customerName} has been removed from your database.`, variant: 'destructive' });
   };
@@ -102,7 +161,7 @@ export default function CustomersPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Customer Management</h1>
           <p className="text-muted-foreground text-md">
-            View, add, and manage your customer database.
+            View, add, and manage your customer database. New customers automatically get a Top-Up Card.
           </p>
         </div>
         <Button onClick={handleAddNewCustomer}>
@@ -178,7 +237,8 @@ export default function CustomersPage() {
                             <AlertDialogHeader>
                               <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                               <AlertDialogDescription>
-                                This action cannot be undone. This will permanently delete the customer "{customer.name}".
+                                This action cannot be undone. This will permanently delete the customer "{customer.name}". 
+                                Any associated Top-Up Card will remain but will be unlinked.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -204,6 +264,7 @@ export default function CustomersPage() {
         </CardHeader>
         <CardContent>
             <p className="text-muted-foreground">Viewing detailed customer purchase history and advanced filtering options are planned for future updates.</p>
+            <p className="text-muted-foreground mt-2">Note: Deleting a customer does not automatically delete their Top-Up Card for data retention reasons, but it will be unlinked.</p>
         </CardContent>
        </Card>
     </div>
