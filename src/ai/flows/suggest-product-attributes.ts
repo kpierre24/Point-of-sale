@@ -11,7 +11,9 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import type { ProductAttributeSuggestion } from '@/types'; // Using the one from global types
+// ProductAttributeSuggestion is already defined as SuggestProductAttributesOutput in this file.
+// If it were meant to be imported from '@/types', the import would be:
+// import type { ProductAttributeSuggestion } from '@/types';
 
 // Define the input schema
 const SuggestProductAttributesInputSchema = z.object({
@@ -20,43 +22,25 @@ const SuggestProductAttributesInputSchema = z.object({
 });
 export type SuggestProductAttributesInput = z.infer<typeof SuggestProductAttributesInputSchema>;
 
-// Define the output schema (matches ProductAttributeSuggestion in types/index.ts)
+// Define the output schema
 const SuggestProductAttributesOutputSchema = z.object({
-  description: z.string().describe('A concise and appealing product description.'),
-  category: z.string().describe('A suitable category for the product.'),
+  description: z.string().describe('A concise and appealing product description (1-2 sentences).'),
+  category: z.string().describe('A single, relevant category term for the product.'),
 });
 export type SuggestProductAttributesOutput = z.infer<typeof SuggestProductAttributesOutputSchema>;
 
 // Exported function to trigger the flow
-export async function suggestProductAttributes(input: SuggestProductAttributesInput): Promise<ProductAttributeSuggestion> {
-  // Basic stub implementation for now
-  // In a real scenario, this would call the Genkit flow.
-  // For now, we return a placeholder or a very simple heuristic.
-  if (input.productName.toLowerCase().includes("apple")) {
-    return {
-      description: `Fresh and juicy ${input.productName}. Perfect for a healthy snack or baking.`,
-      category: input.existingCategory || "Fruits",
-    };
-  }
-  if (input.productName.toLowerCase().includes("shirt")) {
-     return {
-      description: `Comfortable and stylish ${input.productName}. Made from high-quality fabric.`,
-      category: input.existingCategory || "Apparel",
-    };
-  }
-  return {
-    description: `High-quality ${input.productName}.`,
-    category: input.existingCategory || "General",
-  };
-  // return suggestProductAttributesFlow(input); // Uncomment when flow is fully implemented
+export async function suggestProductAttributes(input: SuggestProductAttributesInput): Promise<SuggestProductAttributesOutput> {
+  // Now actually calls the Genkit flow.
+  return suggestProductAttributesFlow(input);
 }
 
-// Define the prompt (example, actual prompt needs refinement)
+// Define the prompt
 const productAttributesPrompt = ai.definePrompt({
   name: 'productAttributesPrompt',
   input: {schema: SuggestProductAttributesInputSchema},
   output: {schema: SuggestProductAttributesOutputSchema},
-  prompt: `Given the product name: {{{productName}}}{{#if existingCategory}} and existing category: {{{existingCategory}}}{{/if}},
+  prompt: `Given the product name: {{{productName}}}{{#if existingCategory}} and existing category (for context): {{{existingCategory}}}{{/if}},
   suggest an appealing product description and a suitable category.
 
   Product Name: {{{productName}}}
@@ -68,7 +52,7 @@ const productAttributesPrompt = ai.definePrompt({
   `,
 });
 
-// Define the flow (stubbed)
+// Define the flow
 const suggestProductAttributesFlow = ai.defineFlow(
   {
     name: 'suggestProductAttributesFlow',
@@ -76,26 +60,12 @@ const suggestProductAttributesFlow = ai.defineFlow(
     outputSchema: SuggestProductAttributesOutputSchema,
   },
   async (input) => {
-    // This is a stub. Replace with actual AI call.
-    // const {output} = await productAttributesPrompt(input);
-    // return output!;
-    
-    // For now, returning placeholder based on input.
-    // This part would involve an actual LLM call in a full implementation.
-    let description = `A high-quality ${input.productName}.`;
-    let category = input.existingCategory || "General";
-
-    if (input.productName.toLowerCase().includes("organic")) {
-        description = `Premium organic ${input.productName}, sourced responsibly.`;
-        if (!input.existingCategory) category = "Organic Products";
-    } else if (input.productName.toLowerCase().includes("handmade")) {
-        description = `Beautifully handmade ${input.productName}, crafted with care.`;
-        if (!input.existingCategory) category = "Handmade";
+    // Call the defined prompt with the input
+    const {output} = await productAttributesPrompt(input);
+    // Ensure output is not null or undefined before returning
+    if (!output) {
+      throw new Error("The AI model did not return an output for product attribute suggestions.");
     }
-    
-    return {
-      description: description,
-      category: category,
-    };
+    return output;
   }
 );
