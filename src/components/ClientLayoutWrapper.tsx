@@ -67,6 +67,7 @@ const settingsNavItems: NavItem[] = [
 ];
 
 const APP_SETTINGS_DOC_ID = 'current'; 
+// Instantiate QueryClient once, outside the component function
 const queryClient = new QueryClient(); 
 
 export function ClientLayoutWrapper({ children }: { children: React.ReactNode }) {
