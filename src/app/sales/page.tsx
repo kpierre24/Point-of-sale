@@ -120,50 +120,55 @@ export default function SalesPage() {
     onPrintError: () => toast({title: "Print Error", description: "Could not print receipt.", variant: "destructive"}),
   });
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  };
+
   // --- Top-Up Card Functions for SaleForm ---
   const findCardById = useCallback((cardId: string): TopUpCard | undefined => {
     return topUpCards.find(c => c.cardId.toUpperCase() === cardId.toUpperCase());
   }, [topUpCards]);
 
-  const deductFromCardBalance = useCallback((cardId: string, amount: number, notes: string): boolean => {
-    let success = false;
-    setTopUpCards(prevCards =>
-      prevCards.map(c => {
-        if (c.cardId === cardId) {
-          if (c.currentBalance < amount) {
-            // This case should ideally be caught in SaleForm, but double-check here.
-            toast({ title: 'Insufficient Balance', description: `Card ${cardId} has only ${formatCurrency(c.currentBalance)}. Deduction failed.`, variant: 'destructive' });
-            success = false;
-            return c;
-          }
-          const newBalance = c.currentBalance - amount;
-          const newTransaction: CardTransaction = {
-            id: crypto.randomUUID(),
-            cardId,
-            timestamp: new Date().toISOString(),
-            type: 'Purchase',
-            amount: -amount, 
-            balanceBefore: c.currentBalance,
-            balanceAfter: newBalance,
-            staffMember: 'Staff User', // Placeholder
-            notes,
-          };
-          setCardTransactions(prevTx => [newTransaction, ...prevTx]);
-          success = true;
-          return { ...c, currentBalance: newBalance, lastUpdatedAt: new Date().toISOString() };
-        }
-        return c;
-      })
-    );
-    if (success) {
-      toast({ title: 'Card Payment Processed', description: `${formatCurrency(amount)} deducted from card ${cardId}.` });
-    }
-    return success;
-  }, [toast]); // `topUpCards` and `cardTransactions` state setters are stable
+  const deductFromCardBalance = useCallback((cardId: string, amountToDeduct: number, notes: string): boolean => {
+    const cardToUpdate = topUpCards.find(c => c.cardId.toUpperCase() === cardId.toUpperCase());
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
-  };
+    if (!cardToUpdate) {
+      toast({ title: 'Card Not Found', description: `Card ${cardId} not found for deduction.`, variant: 'destructive' });
+      return false;
+    }
+
+    if (cardToUpdate.currentBalance < amountToDeduct) {
+      toast({ title: 'Insufficient Balance', description: `Card ${cardId} has only ${formatCurrency(cardToUpdate.currentBalance)}. Deduction of ${formatCurrency(amountToDeduct)} failed.`, variant: 'destructive' });
+      return false;
+    }
+
+    const newBalance = cardToUpdate.currentBalance - amountToDeduct;
+    const now = new Date().toISOString();
+
+    const updatedCardData: TopUpCard = {
+      ...cardToUpdate,
+      currentBalance: newBalance,
+      lastUpdatedAt: now,
+    };
+
+    const newTransaction: CardTransaction = {
+      id: crypto.randomUUID(),
+      cardId: cardToUpdate.cardId, // Use the cardId from the found card
+      timestamp: now,
+      type: 'Purchase',
+      amount: -amountToDeduct,
+      balanceBefore: cardToUpdate.currentBalance,
+      balanceAfter: newBalance,
+      staffMember: 'Staff User', // Placeholder
+      notes,
+    };
+
+    setTopUpCards(prevCards => prevCards.map(c => (c.id === updatedCardData.id ? updatedCardData : c)));
+    setCardTransactions(prevTx => [newTransaction, ...prevTx]);
+
+    toast({ title: 'Card Payment Processed', description: `${formatCurrency(amountToDeduct)} deducted from card ${cardToUpdate.cardId}.` });
+    return true;
+  }, [topUpCards, toast]); // Removed setTopUpCards, setCardTransactions as direct dependencies (they are stable)
 
 
   if (!isMounted) {

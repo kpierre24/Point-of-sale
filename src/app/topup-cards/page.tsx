@@ -91,78 +91,93 @@ export default function TopUpCardsPage() {
           setSelectedCard(cardToRefresh);
           setSelectedCardTransactions(transactions.filter(tx => tx.cardId === cardToRefresh.cardId));
       }
-  }, [cards, transactions]); // Dependencies: cards and transactions. State setters are stable.
+  }, [cards, transactions]); 
 
   const handleManageCard = (card: TopUpCard) => {
     setSelectedCard(card);
-    setSelectedCardTransactions(transactions.filter(tx => tx.cardId === card.cardId));
+    setSelectedCardTransactions(transactions.filter(tx => tx.cardId === card.cardId).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
     setIsManageDialogOpen(true);
   };
 
 
-  const handleTopUp = (cardId: string, amount: number, notes?: string) => {
-    setCards(prevCards => 
-      prevCards.map(c => {
-        if (c.cardId === cardId) {
-          const newBalance = c.currentBalance + amount;
-          const newTransaction: CardTransaction = {
-            id: crypto.randomUUID(),
-            cardId,
-            timestamp: new Date().toISOString(),
-            type: 'Top-Up',
-            amount,
-            balanceBefore: c.currentBalance,
-            balanceAfter: newBalance,
-            staffMember: 'Staff User', // Placeholder
-            notes,
-          };
-          setTransactions(prevTx => [newTransaction, ...prevTx]);
-          return { ...c, currentBalance: newBalance, lastUpdatedAt: new Date().toISOString() };
-        }
-        return c;
-      })
-    );
-    // For dialog refresh
+  const handleTopUp = useCallback((cardId: string, amount: number, notes?: string) => {
+    const cardToUpdate = cards.find(c => c.cardId === cardId);
+    if (!cardToUpdate) {
+        toast({ title: 'Error', description: 'Card not found for top-up.', variant: 'destructive' });
+        return;
+    }
+
+    const newBalance = cardToUpdate.currentBalance + amount;
+    const now = new Date().toISOString();
+    
+    const updatedCardData: TopUpCard = {
+        ...cardToUpdate,
+        currentBalance: newBalance,
+        lastUpdatedAt: now,
+    };
+
+    const newTransaction: CardTransaction = {
+        id: crypto.randomUUID(),
+        cardId,
+        timestamp: now,
+        type: 'Top-Up',
+        amount,
+        balanceBefore: cardToUpdate.currentBalance,
+        balanceAfter: newBalance,
+        staffMember: 'Staff User', // Placeholder
+        notes,
+    };
+
+    setCards(prevCards => prevCards.map(c => (c.id === updatedCardData.id ? updatedCardData : c)));
+    setTransactions(prevTx => [newTransaction, ...prevTx]);
+    
     if (selectedCard?.cardId === cardId) {
         refreshCardDataForDialog(cardId);
     }
-  };
+  }, [cards, selectedCard?.cardId, refreshCardDataForDialog, toast]);
 
-  const handleDeduct = (cardId: string, amount: number, notes?: string): boolean => {
-    let success = false;
-    setCards(prevCards =>
-      prevCards.map(c => {
-        if (c.cardId === cardId) {
-          if (c.currentBalance < amount) {
-            toast({ title: 'Insufficient Balance', description: `Card ${cardId} has only ${formatCurrency(c.currentBalance)}.`, variant: 'destructive' });
-            success = false;
-            return c;
-          }
-          const newBalance = c.currentBalance - amount;
-          const newTransaction: CardTransaction = {
-            id: crypto.randomUUID(),
-            cardId,
-            timestamp: new Date().toISOString(),
-            type: 'Purchase',
-            amount: -amount, // Store deductions as negative for clarity if needed, or always positive based on type
-            balanceBefore: c.currentBalance,
-            balanceAfter: newBalance,
-            staffMember: 'Staff User', // Placeholder
-            notes,
-          };
-          setTransactions(prevTx => [newTransaction, ...prevTx]);
-          success = true;
-          return { ...c, currentBalance: newBalance, lastUpdatedAt: new Date().toISOString() };
-        }
-        return c;
-      })
-    );
-     // For dialog refresh
-    if (selectedCard?.cardId === cardId && success) {
+  const handleDeduct = useCallback((cardId: string, amountToDeduct: number, notes?: string): boolean => {
+    const cardToUpdate = cards.find(c => c.cardId === cardId);
+
+    if (!cardToUpdate) {
+      toast({ title: 'Card Not Found', description: `Card ${cardId} not found for deduction.`, variant: 'destructive' });
+      return false;
+    }
+
+    if (cardToUpdate.currentBalance < amountToDeduct) {
+      toast({ title: 'Insufficient Balance', description: `Card ${cardId} has only ${formatCurrency(cardToUpdate.currentBalance)}. Deduction of ${formatCurrency(amountToDeduct)} failed.`, variant: 'destructive' });
+      return false;
+    }
+
+    const newBalance = cardToUpdate.currentBalance - amountToDeduct;
+    const now = new Date().toISOString();
+
+    const updatedCardData: TopUpCard = {
+      ...cardToUpdate,
+      currentBalance: newBalance,
+      lastUpdatedAt: now,
+    };
+
+    const newTransaction: CardTransaction = {
+      id: crypto.randomUUID(),
+      cardId,
+      timestamp: now,
+      type: 'Purchase', // Or 'Adjustment' if this is not from a sale
+      amount: -amountToDeduct,
+      balanceBefore: cardToUpdate.currentBalance,
+      balanceAfter: newBalance,
+      staffMember: 'Staff User', // Placeholder
+      notes,
+    };
+
+    setCards(prevCards => prevCards.map(c => (c.id === updatedCardData.id ? updatedCardData : c)));
+    setTransactions(prevTx => [newTransaction, ...prevTx]);
+    
+    if (selectedCard?.cardId === cardId) {
        refreshCardDataForDialog(cardId);
     }
-    return success;
-  };
+    return true;
+  }, [cards, selectedCard?.cardId, refreshCardDataForDialog, toast]);
 
   const onScanSuccess = (decodedText: string) => {
     setIsScannerActive(false); // Turn off scanner
