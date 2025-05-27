@@ -1,3 +1,4 @@
+
 // src/components/SaleForm.tsx
 "use client";
 
@@ -31,6 +32,7 @@ interface SaleFormProps {
   availableProducts: Product[];
   findCardByCardId: (cardId: string) => TopUpCard | undefined; // Changed from findCardById to findCardByCardId for clarity
   appSettings: Partial<AppSettings>; // Pass appSettings as a prop
+  isSubmittingSale?: boolean; // Added prop to indicate if sale is being submitted
 }
 
 export function SaleForm({ 
@@ -38,7 +40,8 @@ export function SaleForm({
   soldItemsForAISuggestion, 
   availableProducts,
   findCardByCardId,
-  appSettings
+  appSettings,
+  isSubmittingSale = false // Default to false
 }: SaleFormProps) {
   const [productName, setProductName] = useState("");
   const [quantity, setQuantity] = useState<number | string>(1);
@@ -480,8 +483,8 @@ export function SaleForm({
             </div>
           </div>
           
-          <Button type="submit" className="w-full" disabled={!canSubmit || recordSaleMutation.isPending}>
-            {recordSaleMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <PlusSquare className="mr-2 h-5 w-5" />}
+          <Button type="submit" className="w-full" disabled={!canSubmit || isSubmittingSale}>
+            {isSubmittingSale ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <PlusSquare className="mr-2 h-5 w-5" />}
             Record Sale
           </Button>
         </form>
@@ -489,3 +492,4 @@ export function SaleForm({
     </Card>
   );
 }
+

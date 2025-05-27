@@ -287,9 +287,8 @@ export default function SalesPage() {
                 soldItemsForAISuggestion={soldItems.slice(0, 10).map(item => ({ name: item.name, price: item.price }))}
                 availableProducts={products}
                 findCardByCardId={findCardByCardId}
-                // onDeductFromCard is effectively handled by recordSaleMutation now
-                // So it's no longer passed directly. The form will pass card details to onRecordSale.
                 appSettings={appSettings}
+                isSubmittingSale={recordSaleMutation.isPending}
               />
             </div>
             <div className="lg:col-span-3">
@@ -343,3 +342,4 @@ export default function SalesPage() {
       </div>
   );
 }
+
