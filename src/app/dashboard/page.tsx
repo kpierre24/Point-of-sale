@@ -3,24 +3,38 @@
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button"; // Added Button import
-import { BarChart, DollarSign, Package, Users, Loader2 } from "lucide-react";
-import type { Product, Customer, SoldProduct } from '@/types';
-import { useRouter } from 'next/navigation'; // Added useRouter import
+import { Button } from "@/components/ui/button";
+import { BarChart, DollarSign, Package, Users, Loader2, ShoppingCart } from "lucide-react";
+import type { Product, Customer, SoldProduct, DailySalesData, ProductCategorySalesData } from '@/types';
+import { useRouter } from 'next/navigation';
+import { DailySalesChart } from '@/components/charts/DailySalesChart';
+import { TopCategoriesChart } from '@/components/charts/TopCategoriesChart';
+import { subDays, formatISO, startOfDay, isAfter, parseISO, endOfDay } from 'date-fns';
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 };
 
 export default function DashboardPage() {
-  const router = useRouter(); // Initialize router
+  const router = useRouter();
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [totalSalesCount, setTotalSalesCount] = useState(0);
-  const [productsInStock, setProductsInStock] = useState(0);
+  const [productsInStockCount, setProductsInStockCount] = useState(0);
   const [customerCount, setCustomerCount] = useState(0);
+  
+  const [dailySalesData, setDailySalesData] = useState<DailySalesData[]>([]);
+  const [topCategoriesData, setTopCategoriesData] = useState<ProductCategorySalesData[]>([]);
+  
   const [isDataLoading, setIsDataLoading] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isMounted) return;
+
     setIsDataLoading(true);
     const storedSales = localStorage.getItem('soldItems');
     const storedProducts = localStorage.getItem('products');
@@ -28,39 +42,54 @@ export default function DashboardPage() {
 
     let revenue = 0;
     let salesCount = 0;
-    if (storedSales) {
-      try {
-        const sales: SoldProduct[] = JSON.parse(storedSales);
-        sales.forEach(sale => {
-          revenue += sale.total;
-          salesCount += 1; 
-        });
-      } catch (e) { console.error("Failed to parse sales for dashboard", e); }
-    }
+    const sales: SoldProduct[] = storedSales ? JSON.parse(storedSales) : [];
+    
+    sales.forEach(sale => {
+      revenue += sale.total;
+      salesCount += 1; 
+    });
     setTotalRevenue(revenue);
     setTotalSalesCount(salesCount);
 
-    let stockCount = 0;
-    if (storedProducts) {
-      try {
-        const products: Product[] = JSON.parse(storedProducts);
-        stockCount = products.filter(p => p.stockQuantity > 0).length; 
-      } catch (e) { console.error("Failed to parse products for dashboard", e); }
-    }
-    setProductsInStock(stockCount);
+    const products: Product[] = storedProducts ? JSON.parse(storedProducts) : [];
+    const stockCount = products.filter(p => p.stockQuantity > 0).length; 
+    setProductsInStockCount(stockCount);
 
-    let custCount = 0;
-    if (storedCustomers) {
-      try {
-        const customers: Customer[] = JSON.parse(storedCustomers);
-        custCount = customers.length;
-      } catch (e) { console.error("Failed to parse customers for dashboard", e); }
+    const customers: Customer[] = storedCustomers ? JSON.parse(storedCustomers) : [];
+    setCustomerCount(customers.length);
+
+    // Prepare data for DailySalesChart (last 7 days)
+    const today = startOfDay(new Date());
+    const last7DaysData: DailySalesData[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const day = subDays(today, i);
+      const dayString = formatISO(day, { representation: 'date' });
+      const salesOnDay = sales.filter(s => formatISO(parseISO(s.timestamp), { representation: 'date' }) === dayString);
+      last7DaysData.push({
+        date: dayString,
+        totalSales: salesOnDay.reduce((sum, s) => sum + s.total, 0),
+      });
     }
-    setCustomerCount(custCount);
+    setDailySalesData(last7DaysData);
+
+    // Prepare data for TopCategoriesChart
+    const categorySales: { [key: string]: number } = {};
+    sales.forEach(sale => {
+      const productDetails = products.find(p => p.id === sale.productId);
+      const category = productDetails?.category || 'Uncategorized';
+      categorySales[category] = (categorySales[category] || 0) + sale.quantity;
+    });
+    
+    const sortedCategories = Object.entries(categorySales)
+      .map(([category, quantitySold]) => ({ category, quantitySold }))
+      .sort((a, b) => b.quantitySold - a.quantitySold);
+      
+    setTopCategoriesData(sortedCategories.slice(0, 5)); // Top 5 or fewer
+
     setIsDataLoading(false);
-  }, []);
+  }, [isMounted]);
 
-  if (isDataLoading) {
+  if (!isMounted || isDataLoading) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-150px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -94,7 +123,7 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
-            <BarChart className="h-4 w-4 text-muted-foreground" />
+            <ShoppingCart className="h-4 w-4 text-muted-foreground" /> {/* Changed icon */}
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalSalesCount}</div>
@@ -109,7 +138,7 @@ export default function DashboardPage() {
             <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{productsInStock}</div>
+            <div className="text-2xl font-bold">{productsInStockCount}</div>
             <p className="text-xs text-muted-foreground">
               Total unique products available
             </p>
@@ -129,17 +158,13 @@ export default function DashboardPage() {
         </Card>
       </div>
       
+      <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-2">
+        <DailySalesChart data={dailySalesData} />
+        <TopCategoriesChart data={topCategoriesData} />
+      </div>
+
       <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Overview of recent sales and stock movements.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">Recent activity feed coming soon.</p>
-          </CardContent>
-        </Card>
-        <Card>
+         <Card>
           <CardHeader>
             <CardTitle>Quick Actions</CardTitle>
             <CardDescription>Access common tasks quickly.</CardDescription>
@@ -151,6 +176,15 @@ export default function DashboardPage() {
             <Button variant="outline" onClick={() => router.push('/customers')}>Add Customer</Button>
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Recent Activity</CardTitle> {/* Kept as placeholder for now */}
+            <CardDescription>Overview of recent sales and stock movements.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">Detailed recent activity feed coming soon.</p>
+          </CardContent>
+        </Card>
       </div>
 
        <Card className="mt-8">
@@ -158,7 +192,7 @@ export default function DashboardPage() {
             <CardTitle>Advanced Analytics</CardTitle>
         </CardHeader>
         <CardContent>
-            <p className="text-muted-foreground">More detailed reports, charts, and sales forecasting will be available here. Data for dashboard cards is currently sourced from local storage for demonstration.</p>
+            <p className="text-muted-foreground">More detailed reports and sales forecasting will be available here. Data for dashboard cards is currently sourced from local storage for demonstration.</p>
         </CardContent>
        </Card>
     </div>

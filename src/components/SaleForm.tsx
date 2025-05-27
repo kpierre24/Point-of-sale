@@ -2,14 +2,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { SoldProduct, Product, PaymentMethod, TopUpCard, AppSettings } from "@/types";
+import type { SoldProduct, Product, PaymentMethod, TopUpCard, AppSettings, DiscountType } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
 import { TAX_RATE as DEFAULT_TAX_RATE, PAYMENT_METHODS } from "@/config/constants";
 import { suggestProductDetails, type SuggestProductDetailsInput } from '@/ai/flows/suggest-product-details';
-import { Lightbulb, PlusSquare, Loader2, PackageSearch, ScanLine, CreditCard, CheckCircle, XCircle } from "lucide-react";
+import { Lightbulb, PlusSquare, Loader2, PackageSearch, ScanLine, CreditCard, CheckCircle, XCircle, Percent, MinusCircle, Tag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -45,7 +45,11 @@ export function SaleForm({
   const [selectedProductId, setSelectedProductId] = useState<string | undefined>(undefined);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PAYMENT_METHODS[0]);
   
-  const [subtotal, setSubtotal] = useState(0);
+  const [subtotalBeforeDiscount, setSubtotalBeforeDiscount] = useState(0);
+  const [discountType, setDiscountType] = useState<DiscountType>('none');
+  const [discountValue, setDiscountValue] = useState<number | string>(0);
+  const [calculatedDiscountAmount, setCalculatedDiscountAmount] = useState(0);
+  const [subtotalAfterDiscount, setSubtotalAfterDiscount] = useState(0);
   const [taxAmount, setTaxAmount] = useState(0);
   const [total, setTotal] = useState(0);
   const [currentTaxRate, setCurrentTaxRate] = useState(DEFAULT_TAX_RATE);
@@ -91,24 +95,42 @@ export function SaleForm({
   const calculateTotals = useCallback(() => {
     const numQuantity = Number(quantity);
     const numPrice = Number(price);
+    const numDiscountValue = Number(discountValue) || 0;
 
     if (numQuantity > 0 && numPrice > 0) {
-      const currentSubtotal = numPrice * numQuantity;
-      const currentTaxAmount = currentSubtotal * currentTaxRate; // Use dynamic tax rate
-      const currentTotal = currentSubtotal + currentTaxAmount;
-      setSubtotal(currentSubtotal);
+      const currentSubtotalBeforeDiscount = numPrice * numQuantity;
+      setSubtotalBeforeDiscount(currentSubtotalBeforeDiscount);
+
+      let currentDiscountAmount = 0;
+      if (discountType === 'percentage') {
+        currentDiscountAmount = currentSubtotalBeforeDiscount * (numDiscountValue / 100);
+      } else if (discountType === 'fixed') {
+        currentDiscountAmount = numDiscountValue;
+      }
+      // Ensure discount doesn't exceed subtotal
+      currentDiscountAmount = Math.min(currentDiscountAmount, currentSubtotalBeforeDiscount);
+      setCalculatedDiscountAmount(currentDiscountAmount);
+      
+      const currentSubtotalAfterDiscount = currentSubtotalBeforeDiscount - currentDiscountAmount;
+      setSubtotalAfterDiscount(currentSubtotalAfterDiscount);
+
+      const currentTaxAmount = currentSubtotalAfterDiscount * currentTaxRate;
       setTaxAmount(currentTaxAmount);
+      
+      const currentTotal = currentSubtotalAfterDiscount + currentTaxAmount;
       setTotal(currentTotal);
     } else {
-      setSubtotal(0);
+      setSubtotalBeforeDiscount(0);
+      setCalculatedDiscountAmount(0);
+      setSubtotalAfterDiscount(0);
       setTaxAmount(0);
       setTotal(0);
     }
-  }, [quantity, price, currentTaxRate]);
+  }, [quantity, price, currentTaxRate, discountType, discountValue]);
 
   useEffect(() => {
     calculateTotals();
-  }, [quantity, price, currentTaxRate, calculateTotals]);
+  }, [quantity, price, currentTaxRate, discountType, discountValue, calculateTotals]);
 
   useEffect(() => {
     // Reset card verification if payment method changes from Top-Up Card
@@ -236,7 +258,11 @@ export function SaleForm({
         name: productName, 
         price: numPrice, 
         quantity: numQuantity, 
-        subtotal, 
+        subtotalBeforeDiscount: subtotalBeforeDiscount,
+        discountType: discountType !== 'none' ? discountType : undefined,
+        discountValue: discountType !== 'none' ? Number(discountValue) : undefined,
+        discountAmount: calculatedDiscountAmount > 0 ? calculatedDiscountAmount : undefined,
+        subtotal: subtotalAfterDiscount, 
         taxAmount, 
         total, 
         productId: selectedProductId,
@@ -254,6 +280,8 @@ export function SaleForm({
     setPaymentCardIdInput('');
     setVerifiedPaymentCard(null);
     setIsScanningPaymentCard(false);
+    setDiscountType('none');
+    setDiscountValue(0);
   };
   
   const canSubmit = productName.trim() && Number(quantity) > 0 && Number(price) > 0 && !isScanningPaymentCard && !isSuggesting;
@@ -265,7 +293,7 @@ export function SaleForm({
           <PlusSquare className="mr-2 h-6 w-6 text-primary" />
           Add New Sale
         </CardTitle>
-        <CardDescription>Enter product details or select an existing product to record a sale.</CardDescription>
+        <CardDescription>Enter product details or select an existing product to record a sale. Apply discounts if applicable.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -352,6 +380,41 @@ export function SaleForm({
             </div>
           </div>
 
+          {/* Discount Section */}
+          <Card className="p-4 space-y-3 bg-muted/20 border-dashed">
+            <div className="flex justify-between items-center">
+              <Label className="text-md font-medium flex items-center"><Tag className="mr-2 h-5 w-5 text-primary"/>Discount</Label>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="discountType">Discount Type</Label>
+                <Select value={discountType} onValueChange={(value: DiscountType) => {setDiscountType(value); setDiscountValue(0);}}>
+                  <SelectTrigger id="discountType">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="percentage"><Percent className="inline-block mr-2 h-4 w-4"/>Percentage (%)</SelectItem>
+                    <SelectItem value="fixed"><MinusCircle className="inline-block mr-2 h-4 w-4"/>Fixed Amount ($)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="discountValue">Discount Value</Label>
+                <Input
+                  id="discountValue"
+                  type="number"
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
+                  min="0"
+                  step={discountType === 'percentage' ? "0.1" : "0.01"}
+                  disabled={discountType === 'none'}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+          </Card>
+
            <div className="space-y-2">
             <Label htmlFor="paymentMethod">Payment Method</Label>
             <Select onValueChange={(value: PaymentMethod) => setPaymentMethod(value)} value={paymentMethod}>
@@ -417,8 +480,18 @@ export function SaleForm({
           <div className="space-y-3 rounded-md bg-muted/50 p-4 border">
             <h3 className="text-sm font-medium text-muted-foreground">Sale Summary</h3>
             <div className="flex justify-between text-sm">
-              <span>Subtotal:</span>
-              <span className="font-medium">{formatCurrency(subtotal)}</span>
+              <span>Subtotal (Before Discount):</span>
+              <span className="font-medium">{formatCurrency(subtotalBeforeDiscount)}</span>
+            </div>
+             {calculatedDiscountAmount > 0 && (
+              <div className="flex justify-between text-sm text-red-600">
+                <span>Discount Applied:</span>
+                <span className="font-medium">- {formatCurrency(calculatedDiscountAmount)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-sm">
+              <span>Subtotal (After Discount):</span>
+              <span className="font-medium">{formatCurrency(subtotalAfterDiscount)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span>Tax ({ (currentTaxRate * 100).toFixed(2) }%):</span>

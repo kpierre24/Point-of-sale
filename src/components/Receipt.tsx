@@ -2,7 +2,7 @@
 "use client";
 
 import React from 'react';
-import type { SoldProduct, AppSettings } from '@/types';
+import type { SoldProduct } from '@/types';
 import { APP_TITLE as DEFAULT_APP_TITLE } from '@/config/constants';
 import { format } from 'date-fns';
 
@@ -66,7 +66,17 @@ export const Receipt = React.forwardRef<HTMLDivElement, ReceiptProps>(
 
       <section className="mb-6 pt-2 border-t border-dashed border-foreground">
         <div className="flex justify-between">
-          <span>Subtotal:</span>
+          <span>Subtotal (Before Discount):</span>
+          <span>{formatCurrency(sale.subtotalBeforeDiscount)}</span>
+        </div>
+        {sale.discountAmount && sale.discountAmount > 0 && (
+            <div className="flex justify-between text-red-600">
+                <span>Discount ({sale.discountType === 'percentage' ? `${sale.discountValue}%` : `${formatCurrency(sale.discountValue || 0)}`}):</span>
+                <span>- {formatCurrency(sale.discountAmount)}</span>
+            </div>
+        )}
+         <div className="flex justify-between">
+          <span>Subtotal (After Discount):</span>
           <span>{formatCurrency(sale.subtotal)}</span>
         </div>
         <div className="flex justify-between">

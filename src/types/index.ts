@@ -40,7 +40,7 @@ export interface PurchaseOrder {
   notes?: string;
 }
 
-export const USER_ROLES = ['Front Staff', 'Manager', 'Owner', 'Administrator'] as const;
+export const USER_ROLES = ["Front Staff", "Manager", "Owner", "Administrator"] as const;
 export type UserRole = typeof USER_ROLES[number];
 
 // Represents the custom user profile stored locally
@@ -54,13 +54,18 @@ export interface User {
 }
 
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+export type DiscountType = 'percentage' | 'fixed' | 'none';
 
 export interface SoldProduct {
   id: string;
   name: string; 
-  price: number; 
+  price: number; // Unit price
   quantity: number;
-  subtotal: number;
+  subtotalBeforeDiscount: number; // price * quantity
+  discountType?: DiscountType;
+  discountValue?: number; // The percentage (e.g., 10) or fixed amount
+  discountAmount?: number; // Calculated monetary value of the discount
+  subtotal: number; // Subtotal after discount
   taxAmount: number;
   total: number;
   timestamp: string; 
@@ -130,4 +135,15 @@ export interface AppSettings {
   storeAddress?: string;
   storePhone?: string;
   storeWebsite?: string;
+}
+
+// Chart Data Types
+export interface DailySalesData {
+  date: string;
+  totalSales: number;
+}
+
+export interface ProductCategorySalesData {
+  category: string;
+  quantitySold: number;
 }
