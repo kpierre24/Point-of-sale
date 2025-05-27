@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { PlusCircle, Edit, Trash2, Image as ImageIcon } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Image as ImageIcon, Download } from 'lucide-react'; // Added Download
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
 import {
@@ -31,6 +31,16 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 
+const escapeCsvField = (field: any): string => {
+  if (field === null || field === undefined) {
+    return '';
+  }
+  const stringField = String(field);
+  if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n')) {
+    return `"${stringField.replace(/"/g, '""')}"`;
+  }
+  return stringField;
+};
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -51,7 +61,6 @@ export default function ProductsPage() {
         setProducts([]);
       }
     }
-    // Load recipes for the ProductForm's "Load from Recipe" feature
     const storedRecipes = localStorage.getItem('builtProductRecipes');
     if (storedRecipes) {
         try {
@@ -73,18 +82,16 @@ export default function ProductsPage() {
     setProducts((prevProducts) => {
       const existingIndex = prevProducts.findIndex((p) => p.id === product.id);
       if (existingIndex > -1) {
-        // Update existing product
         const updatedProducts = [...prevProducts];
         updatedProducts[existingIndex] = product;
         toast({ title: 'Product Updated', description: `${product.name} has been updated.` });
         return updatedProducts;
       } else {
-        // Add new product
         toast({ title: 'Product Added', description: `${product.name} has been added to your inventory.` });
         return [product, ...prevProducts];
       }
     });
-    setProductToEdit(null); // Clear productToEdit after saving
+    setProductToEdit(null); 
   };
 
   const handleAddNewProduct = () => {
@@ -107,6 +114,43 @@ export default function ProductsPage() {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
 
+  const handleExportProducts = () => {
+    if (products.length === 0) {
+      toast({ title: "No Data", description: "There are no products to export.", variant: "destructive" });
+      return;
+    }
+
+    const headers = ["ID", "Name", "Description", "Price", "Cost of Goods Sold", "Stock Quantity", "Category", "Image URL", "Recipe ID"];
+    
+    const csvRows = [
+      headers.join(','),
+      ...products.map(product => [
+        escapeCsvField(product.id),
+        escapeCsvField(product.name),
+        escapeCsvField(product.description),
+        escapeCsvField(product.price),
+        escapeCsvField(product.costOfGoodsSold),
+        escapeCsvField(product.stockQuantity),
+        escapeCsvField(product.category),
+        escapeCsvField(product.imageUrl),
+        escapeCsvField(product.recipeId),
+      ].join(','))
+    ];
+    
+    const csvString = csvRows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `products_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({ title: "Export Successful", description: "Product data exported to CSV." });
+  };
+
   return (
     <div className="space-y-8">
       <header className="flex items-center justify-between mb-8">
@@ -116,10 +160,16 @@ export default function ProductsPage() {
             Add, view, edit, and manage your product inventory.
             </p>
         </div>
-        <Button onClick={handleAddNewProduct}>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Add Product
-        </Button>
+        <div className="flex items-center space-x-2">
+          <Button onClick={handleExportProducts} variant="outline">
+            <Download className="mr-2 h-4 w-4" />
+            Export Products
+          </Button>
+          <Button onClick={handleAddNewProduct}>
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Add Product
+          </Button>
+        </div>
       </header>
 
       <ProductForm
@@ -127,7 +177,7 @@ export default function ProductsPage() {
         onOpenChange={setIsFormOpen}
         onSave={handleSaveProduct}
         productToEdit={productToEdit}
-        availableRecipes={availableRecipes} // Pass recipes to form
+        availableRecipes={availableRecipes} 
       />
 
       <Card>

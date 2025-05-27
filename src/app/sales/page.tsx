@@ -6,7 +6,7 @@ import type { SoldProduct, Product, TopUpCard, CardTransaction, AppSettings } fr
 import { SaleForm } from "@/components/SaleForm";
 import { SalesHistoryTable } from "@/components/SalesHistoryTable";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { History, Printer, Loader2 } from "lucide-react";
+import { History, Printer, Loader2, Download } from "lucide-react"; // Added Download
 import { Receipt } from "@/components/Receipt"; 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +25,17 @@ import { APP_TITLE as DEFAULT_APP_TITLE } from "@/config/constants";
 const TOPUP_CARDS_STORAGE_KEY = 'topUpCardsData';
 const CARD_TRANSACTIONS_STORAGE_KEY = 'cardTransactionsData';
 const APP_SETTINGS_KEY = 'appSettings';
+
+const escapeCsvField = (field: any): string => {
+  if (field === null || field === undefined) {
+    return '';
+  }
+  const stringField = String(field);
+  if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n')) {
+    return `"${stringField.replace(/"/g, '""')}"`;
+  }
+  return stringField;
+};
 
 export default function SalesPage() {
   const [soldItems, setSoldItems] = useState<SoldProduct[]>([]);
@@ -133,53 +144,109 @@ export default function SalesPage() {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
 
-  // --- Top-Up Card Functions for SaleForm ---
   const findCardById = useCallback((cardId: string): TopUpCard | undefined => {
     return topUpCards.find(c => c.cardId.toUpperCase() === cardId.toUpperCase());
   }, [topUpCards]);
 
   const deductFromCardBalance = useCallback((cardId: string, amountToDeduct: number, notes: string): boolean => {
     let success = false;
-    const cardToUpdate = topUpCards.find(c => c.cardId.toUpperCase() === cardId.toUpperCase());
+    setTopUpCards(currentCards => {
+        const cardIndex = currentCards.findIndex(c => c.cardId.toUpperCase() === cardId.toUpperCase());
+        if (cardIndex === -1) {
+            toast({ title: 'Card Not Found', description: `Card ${cardId} not found for deduction.`, variant: 'destructive' });
+            success = false;
+            return currentCards;
+        }
+        const cardToUpdate = currentCards[cardIndex];
+        if (cardToUpdate.currentBalance < amountToDeduct) {
+            toast({ title: 'Insufficient Balance', description: `Card ${cardId} has only ${formatCurrency(cardToUpdate.currentBalance)}. Deduction of ${formatCurrency(amountToDeduct)} failed.`, variant: 'destructive' });
+            success = false;
+            return currentCards;
+        }
 
-    if (!cardToUpdate) {
-        toast({ title: 'Card Not Found', description: `Card ${cardId} not found for deduction.`, variant: 'destructive' });
-        return false;
-    }
+        const newBalance = cardToUpdate.currentBalance - amountToDeduct;
+        const now = new Date().toISOString();
+        const updatedCardData: TopUpCard = {
+            ...cardToUpdate,
+            currentBalance: newBalance,
+            lastUpdatedAt: now,
+        };
+        
+        const newTransaction: CardTransaction = {
+            id: crypto.randomUUID(),
+            cardId: cardToUpdate.cardId,
+            timestamp: now,
+            type: 'Purchase',
+            amount: -amountToDeduct,
+            balanceBefore: cardToUpdate.currentBalance,
+            balanceAfter: newBalance,
+            staffMember: 'Staff User', 
+            notes,
+        };
 
-    if (cardToUpdate.currentBalance < amountToDeduct) {
-        toast({ title: 'Insufficient Balance', description: `Card ${cardId} has only ${formatCurrency(cardToUpdate.currentBalance)}. Deduction of ${formatCurrency(amountToDeduct)} failed.`, variant: 'destructive' });
-        return false;
-    }
-
-    const newBalance = cardToUpdate.currentBalance - amountToDeduct;
-    const now = new Date().toISOString();
-
-    const updatedCardData: TopUpCard = {
-        ...cardToUpdate,
-        currentBalance: newBalance,
-        lastUpdatedAt: now,
-    };
-    
-    const newTransaction: CardTransaction = {
-        id: crypto.randomUUID(),
-        cardId: cardToUpdate.cardId,
-        timestamp: now,
-        type: 'Purchase',
-        amount: -amountToDeduct,
-        balanceBefore: cardToUpdate.currentBalance,
-        balanceAfter: newBalance,
-        staffMember: 'Staff User', // Placeholder
-        notes,
-    };
-    
-    setTopUpCards(prevCards => prevCards.map(c => c.id === updatedCardData.id ? updatedCardData : c));
-    setCardTransactions(prevTx => [newTransaction, ...prevTx]);
-
-    toast({ title: 'Card Payment Processed', description: `${formatCurrency(amountToDeduct)} deducted from card ${cardToUpdate.cardId}.` });
-    success = true;
+        setCardTransactions(prevTx => [newTransaction, ...prevTx]);
+        
+        const newCards = [...currentCards];
+        newCards[cardIndex] = updatedCardData;
+        toast({ title: 'Card Payment Processed', description: `${formatCurrency(amountToDeduct)} deducted from card ${cardToUpdate.cardId}.` });
+        success = true;
+        return newCards;
+    });
     return success;
-  }, [topUpCards, toast]); // Removed setCardTransactions from dependencies for setTopUpCards to avoid potential issues
+  }, [toast]);
+
+
+  const handleExportSales = () => {
+    if (soldItems.length === 0) {
+      toast({ title: "No Data", description: "There are no sales to export.", variant: "destructive" });
+      return;
+    }
+
+    const headers = [
+      "ID", "Timestamp", "Product Name", "Quantity", "Unit Price", 
+      "Subtotal Before Discount", "Discount Type", "Discount Value", "Discount Amount",
+      "Subtotal After Discount", "Tax Amount", "Total", "Payment Method", 
+      "Product ID", "Cost of Goods Sold at Sale", "Customer ID", "Staff ID", "Staff Name", "Card ID Used"
+    ];
+    
+    const csvRows = [
+      headers.join(','),
+      ...soldItems.map(sale => [
+        escapeCsvField(sale.id),
+        escapeCsvField(sale.timestamp),
+        escapeCsvField(sale.name),
+        escapeCsvField(sale.quantity),
+        escapeCsvField(sale.price),
+        escapeCsvField(sale.subtotalBeforeDiscount),
+        escapeCsvField(sale.discountType),
+        escapeCsvField(sale.discountValue),
+        escapeCsvField(sale.discountAmount),
+        escapeCsvField(sale.subtotal),
+        escapeCsvField(sale.taxAmount),
+        escapeCsvField(sale.total),
+        escapeCsvField(sale.paymentMethod),
+        escapeCsvField(sale.productId),
+        escapeCsvField(sale.costOfGoodsSoldAtTimeOfSale),
+        escapeCsvField(sale.customerId),
+        escapeCsvField(sale.staffId),
+        escapeCsvField(sale.staffName),
+        escapeCsvField(sale.cardIdUsed),
+      ].join(','))
+    ];
+    
+    const csvString = csvRows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `sales_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({ title: "Export Successful", description: "Sales data exported to CSV." });
+  };
 
 
   if (!isMounted) {
@@ -193,11 +260,17 @@ export default function SalesPage() {
 
   return (
     <div className="space-y-8">
-        <header className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight">Sales Management</h1>
-          <CardDescription className="text-muted-foreground text-md">
-            Record new sales and view sales history. Pay using cash, card, or customer top-up cards.
-          </CardDescription>
+        <header className="mb-8 flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Sales Management</h1>
+            <CardDescription className="text-muted-foreground text-md">
+              Record new sales and view sales history. Pay using cash, card, or customer top-up cards.
+            </CardDescription>
+          </div>
+          <Button onClick={handleExportSales} variant="outline">
+            <Download className="mr-2 h-4 w-4" />
+            Export Sales
+          </Button>
         </header>
 
         <main>

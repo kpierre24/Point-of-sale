@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import type { Customer, TopUpCard } from '@/types'; // Added TopUpCard
+import type { Customer, TopUpCard } from '@/types';
 import { Button } from '@/components/ui/button';
 import { CustomerForm } from '@/components/CustomerForm';
 import {
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { UserPlus, Edit, Trash2, Search, ShoppingBag, CreditCard } from 'lucide-react'; // Added CreditCard
+import { UserPlus, Edit, Trash2, Search, ShoppingBag, CreditCard, Download } from 'lucide-react'; // Added Download
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import {
@@ -34,9 +34,20 @@ import {
 const CUSTOMERS_STORAGE_KEY = 'customers';
 const TOPUP_CARDS_STORAGE_KEY = 'topUpCardsData';
 
+const escapeCsvField = (field: any): string => {
+  if (field === null || field === undefined) {
+    return '';
+  }
+  const stringField = String(field);
+  if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n')) {
+    return `"${stringField.replace(/"/g, '""')}"`;
+  }
+  return stringField;
+};
+
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [topUpCards, setTopUpCards] = useState<TopUpCard[]>([]); // Added state for top-up cards
+  const [topUpCards, setTopUpCards] = useState<TopUpCard[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [customerToEdit, setCustomerToEdit] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -149,8 +160,6 @@ export default function CustomersPage() {
 
   const handleDeleteCustomer = (customerId: string) => {
     const customerName = customers.find(c => c.id === customerId)?.name || "The customer";
-    // Consider what to do with linked top-up cards upon customer deletion (e.g., deactivate, orphan, or delete)
-    // For now, cards are not deleted with customers.
     setCustomers((prevCustomers) => prevCustomers.filter((c) => c.id !== customerId));
     setTimeout(() => {
       toast({ title: 'Customer Deleted', description: `${customerName} has been removed from your database.`, variant: 'destructive' });
@@ -163,6 +172,39 @@ export default function CustomersPage() {
     (customer.phone && customer.phone.includes(searchTerm))
   );
 
+  const handleExportCustomers = () => {
+    if (customers.length === 0) {
+      toast({ title: "No Data", description: "There are no customers to export.", variant: "destructive" });
+      return;
+    }
+
+    const headers = ["ID", "Name", "Email", "Phone", "Address"];
+    
+    const csvRows = [
+      headers.join(','),
+      ...customers.map(customer => [
+        escapeCsvField(customer.id),
+        escapeCsvField(customer.name),
+        escapeCsvField(customer.email),
+        escapeCsvField(customer.phone),
+        escapeCsvField(customer.address),
+      ].join(','))
+    ];
+    
+    const csvString = csvRows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `customers_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast({ title: "Export Successful", description: "Customer data exported to CSV." });
+  };
+
   return (
     <div className="space-y-8">
       <header className="flex items-center justify-between mb-8">
@@ -172,10 +214,16 @@ export default function CustomersPage() {
             View, add, and manage your customer database. New customers automatically get a Top-Up Card.
           </p>
         </div>
-        <Button onClick={handleAddNewCustomer}>
-          <UserPlus className="mr-2 h-4 w-4" />
-          Add Customer
-        </Button>
+        <div className="flex items-center space-x-2">
+          <Button onClick={handleExportCustomers} variant="outline">
+            <Download className="mr-2 h-4 w-4" />
+            Export Customers
+          </Button>
+          <Button onClick={handleAddNewCustomer}>
+            <UserPlus className="mr-2 h-4 w-4" />
+            Add Customer
+          </Button>
+        </div>
       </header>
 
       <CustomerForm
@@ -230,7 +278,7 @@ export default function CustomersPage() {
                           <Edit className="h-4 w-4" />
                           <span className="sr-only">Edit Customer</span>
                         </Button>
-                        <Button variant="outline" size="icon" disabled> {/* Placeholder for purchase history */}
+                        <Button variant="outline" size="icon" disabled> 
                           <ShoppingBag className="h-4 w-4" />
                           <span className="sr-only">View Purchase History</span>
                         </Button>
