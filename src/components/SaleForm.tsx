@@ -2,14 +2,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { SoldProduct, Product, PaymentMethod } from "@/types";
+import type { SoldProduct, Product, PaymentMethod, TopUpCard } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card";
 import { TAX_RATE, PAYMENT_METHODS } from "@/config/constants";
 import { suggestProductDetails, type SuggestProductDetailsInput } from '@/ai/flows/suggest-product-details';
-import { Lightbulb, PlusSquare, Loader2, PackageSearch } from "lucide-react";
+import { Lightbulb, PlusSquare, Loader2, PackageSearch, ScanLine, CreditCard, CheckCircle, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -19,15 +19,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import QRCodeScannerComponent from '@/components/topup-cards/QRCodeScannerComponent'; // For scanning payment card
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
 
 interface SaleFormProps {
   onRecordSale: (saleData: Omit<SoldProduct, "id" | "timestamp" | "staffId" | "staffName">) => void;
   soldItemsForAISuggestion: Pick<SoldProduct, 'name' | 'price'>[];
   availableProducts: Product[];
-  // currentStaffId and currentStaffName props removed
+  findCardById: (cardId: string) => TopUpCard | undefined;
+  onDeductFromCard: (cardId: string, amount: number, notes: string) => boolean;
 }
 
-export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProducts }: SaleFormProps) {
+export function SaleForm({ 
+  onRecordSale, 
+  soldItemsForAISuggestion, 
+  availableProducts,
+  findCardById,
+  onDeductFromCard
+}: SaleFormProps) {
   const [productName, setProductName] = useState("");
   const [quantity, setQuantity] = useState<number | string>(1);
   const [price, setPrice] = useState<number | string>("");
@@ -40,6 +50,12 @@ export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProd
 
   const [isSuggesting, setIsSuggesting] = useState(false);
   const { toast } = useToast();
+
+  // State for Top-Up Card Payment
+  const [paymentCardIdInput, setPaymentCardIdInput] = useState('');
+  const [verifiedPaymentCard, setVerifiedPaymentCard] = useState<TopUpCard | null>(null);
+  const [isScanningPaymentCard, setIsScanningPaymentCard] = useState(false);
+
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
@@ -67,8 +83,17 @@ export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProd
     calculateTotals();
   }, [quantity, price, calculateTotals]);
 
+  useEffect(() => {
+    // Reset card verification if payment method changes from Top-Up Card
+    if (paymentMethod !== 'Top-Up Card') {
+      setVerifiedPaymentCard(null);
+      setPaymentCardIdInput('');
+      setIsScanningPaymentCard(false);
+    }
+  }, [paymentMethod]);
+
   const handleGetSuggestion = async () => {
-    if (!productName.trim() && !selectedProductId) { // Suggestion needs some input
+    if (!productName.trim() && !selectedProductId) { 
       toast({ title: "Enter Product Name or Select Product", description: "Please enter a product name or select one to get suggestions.", variant: "destructive" });
       return;
     }
@@ -117,6 +142,24 @@ export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProd
     }
   };
 
+  const handleVerifyPaymentCard = (idToVerify: string) => {
+    const card = findCardById(idToVerify.toUpperCase());
+    if (card) {
+      setVerifiedPaymentCard(card);
+      setPaymentCardIdInput(card.cardId); // Ensure input reflects verified ID
+      toast({ title: "Card Verified", description: `Card ${card.cardId} balance: ${formatCurrency(card.currentBalance)}`});
+    } else {
+      setVerifiedPaymentCard(null);
+      toast({ title: "Card Not Found", description: `No card found with ID ${idToVerify}.`, variant: "destructive"});
+    }
+    setIsScanningPaymentCard(false); // Stop scanner if it was active
+  };
+
+  const onScanSuccessForPaymentCard = (decodedText: string) => {
+    handleVerifyPaymentCard(decodedText);
+  };
+
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const numQuantity = Number(quantity);
@@ -135,6 +178,30 @@ export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProd
       }
     }
 
+    let cardIdUsedForSale: string | undefined = undefined;
+
+    if (paymentMethod === "Top-Up Card") {
+      if (!verifiedPaymentCard) {
+        toast({ title: "Payment Card Not Verified", description: "Please verify a top-up card for payment.", variant: "destructive" });
+        return;
+      }
+      if (total > verifiedPaymentCard.currentBalance) {
+        toast({ 
+          title: "Insufficient Card Balance", 
+          description: `Sale total ${formatCurrency(total)} exceeds card balance ${formatCurrency(verifiedPaymentCard.currentBalance)}.`,
+          variant: "destructive" 
+        });
+        return;
+      }
+      const deductionNotes = `Sale: ${productName} x${numQuantity}`;
+      const deductionSuccess = onDeductFromCard(verifiedPaymentCard.cardId, total, deductionNotes);
+      if (!deductionSuccess) {
+         // onDeductFromCard should already show a toast on failure.
+        return;
+      }
+      cardIdUsedForSale = verifiedPaymentCard.cardId;
+    }
+
     onRecordSale({ 
         name: productName, 
         price: numPrice, 
@@ -144,17 +211,21 @@ export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProd
         total, 
         productId: selectedProductId,
         paymentMethod: paymentMethod,
-        // staffId and staffName removed
+        cardIdUsed: cardIdUsedForSale,
     });
 
+    // Reset form
     setProductName("");
     setQuantity(1);
     setPrice("");
     setSelectedProductId(undefined);
-    setPaymentMethod(PAYMENT_METHODS[0]);
+    setPaymentMethod(PAYMENT_METHODS[0]); // Reset to default payment method
+    setPaymentCardIdInput('');
+    setVerifiedPaymentCard(null);
+    setIsScanningPaymentCard(false);
   };
   
-  const canSubmit = productName.trim() && Number(quantity) > 0 && Number(price) > 0;
+  const canSubmit = productName.trim() && Number(quantity) > 0 && Number(price) > 0 && !isScanningPaymentCard && !isSuggesting;
 
   return (
     <Card className="shadow-lg">
@@ -264,6 +335,54 @@ export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProd
             </Select>
           </div>
 
+          {paymentMethod === "Top-Up Card" && (
+            <Card className="p-4 space-y-3 bg-muted/30 border-dashed">
+              <CardTitle className="text-lg flex items-center"><CreditCard className="mr-2 h-5 w-5 text-primary" /> Top-Up Card Payment</CardTitle>
+              {!isScanningPaymentCard && !verifiedPaymentCard && (
+                <div className="space-y-2">
+                  <Label htmlFor="paymentCardIdInput">Enter Card ID</Label>
+                  <div className="flex gap-2">
+                    <Input 
+                      id="paymentCardIdInput"
+                      value={paymentCardIdInput}
+                      onChange={(e) => setPaymentCardIdInput(e.target.value.toUpperCase())}
+                      placeholder="e.g., CARD-XXXXXX"
+                      className="uppercase"
+                    />
+                    <Button type="button" variant="secondary" onClick={() => handleVerifyPaymentCard(paymentCardIdInput)}>Verify</Button>
+                  </div>
+                  <Button type="button" variant="outline" className="w-full" onClick={() => setIsScanningPaymentCard(true)}>
+                    <ScanLine className="mr-2 h-4 w-4"/> Scan Card QR
+                  </Button>
+                </div>
+              )}
+              {isScanningPaymentCard && (
+                <QRCodeScannerComponent
+                  active={isScanningPaymentCard}
+                  setActive={setIsScanningPaymentCard}
+                  onScanSuccess={onScanSuccessForPaymentCard}
+                  onScanFailure={(err) => toast({title: "Scan Failed", description: `Could not read QR: ${err}`, variant:"destructive"})}
+                />
+              )}
+              {verifiedPaymentCard && (
+                <Alert variant={total <= verifiedPaymentCard.currentBalance ? "default" : "destructive"} className="bg-background">
+                   {total <= verifiedPaymentCard.currentBalance ? <CheckCircle className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                  <AlertTitle>
+                    Card Verified: {verifiedPaymentCard.cardId}
+                  </AlertTitle>
+                  <AlertDescription>
+                    Balance: {formatCurrency(verifiedPaymentCard.currentBalance)}. 
+                    {total > verifiedPaymentCard.currentBalance && ` Sale total ${formatCurrency(total)} exceeds balance.`}
+                  </AlertDescription>
+                  <Button variant="link" size="sm" className="p-0 h-auto mt-1" onClick={() => { setVerifiedPaymentCard(null); setPaymentCardIdInput('');}}>
+                    Use different card
+                  </Button>
+                </Alert>
+              )}
+            </Card>
+          )}
+
+
           <div className="space-y-3 rounded-md bg-muted/50 p-4 border">
             <h3 className="text-sm font-medium text-muted-foreground">Sale Summary</h3>
             <div className="flex justify-between text-sm">
@@ -280,7 +399,7 @@ export function SaleForm({ onRecordSale, soldItemsForAISuggestion, availableProd
             </div>
           </div>
           
-          <Button type="submit" className="w-full" disabled={!canSubmit || isSuggesting}>
+          <Button type="submit" className="w-full" disabled={!canSubmit}>
             <PlusSquare className="mr-2 h-5 w-5" />
             Record Sale
           </Button>

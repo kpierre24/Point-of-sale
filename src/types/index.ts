@@ -69,6 +69,7 @@ export interface SoldProduct {
   paymentMethod: PaymentMethod;
   staffId?: string; // Optional: ID of the staff member
   staffName?: string; // Optional: Name of the staff member
+  cardIdUsed?: string; // ID of the top-up card used for payment
 }
 
 export interface ProductSuggestion {

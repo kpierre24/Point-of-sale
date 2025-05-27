@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from 'date-fns';
+import { Badge } from "@/components/ui/badge"; // Added for card ID
+import { CreditCard } from "lucide-react"; // Added for card icon
 
 interface SalesHistoryTableProps {
   soldItems: SoldProduct[];
@@ -29,13 +31,30 @@ export function SalesHistoryTable({ soldItems }: SalesHistoryTableProps) {
         {soldItems.length === 0 && <TableCaption>No sales recorded yet.</TableCaption>}
         <TableHeader className="sticky top-0 bg-card z-10">
           <TableRow>
-            <TableHead className="w-[150px]">Date</TableHead><TableHead>Product Name</TableHead><TableHead className="text-right">Qty</TableHead><TableHead className="text-right">Unit Price</TableHead><TableHead className="text-right">Subtotal</TableHead><TableHead className="text-right">Tax</TableHead><TableHead>Payment</TableHead><TableHead className="text-right">Total</TableHead>
+            <TableHead className="w-[150px]">Date</TableHead>
+            <TableHead>Product Name</TableHead>
+            <TableHead className="text-right">Qty</TableHead>
+            <TableHead className="text-right">Unit Price</TableHead>
+            <TableHead>Payment</TableHead>
+            <TableHead className="text-right">Total</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {soldItems.map((item) => (
             <TableRow key={item.id}>
-              <TableCell>{format(new Date(item.timestamp), 'MMM dd, yyyy HH:mm')}</TableCell><TableCell className="font-medium">{item.name}</TableCell><TableCell className="text-right">{item.quantity}</TableCell><TableCell className="text-right">{formatCurrency(item.price)}</TableCell><TableCell className="text-right">{formatCurrency(item.subtotal)}</TableCell><TableCell className="text-right">{formatCurrency(item.taxAmount)}</TableCell><TableCell>{item.paymentMethod}</TableCell><TableCell className="text-right font-semibold">{formatCurrency(item.total)}</TableCell>
+              <TableCell>{format(new Date(item.timestamp), 'MMM dd, yyyy HH:mm')}</TableCell>
+              <TableCell className="font-medium">{item.name}</TableCell>
+              <TableCell className="text-right">{item.quantity}</TableCell>
+              <TableCell className="text-right">{formatCurrency(item.price)}</TableCell>
+              <TableCell>
+                {item.paymentMethod}
+                {item.paymentMethod === 'Top-Up Card' && item.cardIdUsed && (
+                  <Badge variant="outline" className="ml-2 font-mono text-xs">
+                    <CreditCard className="mr-1 h-3 w-3"/> {item.cardIdUsed}
+                  </Badge>
+                )}
+              </TableCell>
+              <TableCell className="text-right font-semibold">{formatCurrency(item.total)}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -43,4 +62,3 @@ export function SalesHistoryTable({ soldItems }: SalesHistoryTableProps) {
     </ScrollArea>
   );
 }
-

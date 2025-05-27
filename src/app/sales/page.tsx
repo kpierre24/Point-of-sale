@@ -1,8 +1,8 @@
 // src/app/sales/page.tsx
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import type { SoldProduct, Product } from "@/types"; 
+import { useState, useEffect, useRef, useCallback } from "react";
+import type { SoldProduct, Product, TopUpCard, CardTransaction } from "@/types"; 
 import { SaleForm } from "@/components/SaleForm";
 import { SalesHistoryTable } from "@/components/SalesHistoryTable";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -21,36 +21,48 @@ import {
 import { useReactToPrint } from 'react-to-print';
 import { useToast } from "@/hooks/use-toast";
 
+const TOPUP_CARDS_STORAGE_KEY = 'topUpCardsData';
+const CARD_TRANSACTIONS_STORAGE_KEY = 'cardTransactionsData';
+
 export default function SalesPage() {
   const [soldItems, setSoldItems] = useState<SoldProduct[]>([]);
   const [products, setProducts] = useState<Product[]>([]); 
+  const [topUpCards, setTopUpCards] = useState<TopUpCard[]>([]);
+  const [cardTransactions, setCardTransactions] = useState<CardTransaction[]>([]);
+  
   const [isMounted, setIsMounted] = useState(false);
   const [receiptData, setReceiptData] = useState<SoldProduct | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const receiptComponentRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    setIsMounted(true);
+  const loadData = useCallback(() => {
     const savedSoldItems = localStorage.getItem("soldItems");
     if (savedSoldItems) {
-      try {
-        setSoldItems(JSON.parse(savedSoldItems));
-      } catch (e) {
-        console.error("Failed to parse soldItems from localStorage", e);
-        setSoldItems([]);
-      }
+      try { setSoldItems(JSON.parse(savedSoldItems)); } 
+      catch (e) { console.error("Failed to parse soldItems", e); setSoldItems([]); }
     }
     const savedProducts = localStorage.getItem("products");
     if (savedProducts) {
-      try {
-        setProducts(JSON.parse(savedProducts));
-      } catch (e) {
-        console.error("Failed to parse products from localStorage", e);
-        setProducts([]);
-      }
+      try { setProducts(JSON.parse(savedProducts)); }
+      catch (e) { console.error("Failed to parse products", e); setProducts([]); }
+    }
+    const storedCards = localStorage.getItem(TOPUP_CARDS_STORAGE_KEY);
+    if (storedCards) {
+      try { setTopUpCards(JSON.parse(storedCards)); }
+      catch (e) { console.error("Failed to parse topUpCards", e); setTopUpCards([]); }
+    }
+    const storedCardTransactions = localStorage.getItem(CARD_TRANSACTIONS_STORAGE_KEY);
+    if (storedCardTransactions) {
+      try { setCardTransactions(JSON.parse(storedCardTransactions)); }
+      catch (e) { console.error("Failed to parse cardTransactions", e); setCardTransactions([]);}
     }
   }, []);
+
+  useEffect(() => {
+    setIsMounted(true);
+    loadData();
+  }, [loadData]);
 
   useEffect(() => {
     if (isMounted) {
@@ -64,12 +76,24 @@ export default function SalesPage() {
     }
   }, [products, isMounted]);
 
+  useEffect(() => {
+    if (isMounted) {
+      localStorage.setItem(TOPUP_CARDS_STORAGE_KEY, JSON.stringify(topUpCards));
+    }
+  }, [topUpCards, isMounted]);
+
+  useEffect(() => {
+    if (isMounted) {
+      localStorage.setItem(CARD_TRANSACTIONS_STORAGE_KEY, JSON.stringify(cardTransactions));
+    }
+  }, [cardTransactions, isMounted]);
+
+
   const handleRecordSale = (newSaleData: Omit<SoldProduct, "id" | "timestamp" | "staffId" | "staffName">) => {
     const newSale: SoldProduct = {
       ...newSaleData,
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
-      // staffId and staffName removed as auth is removed
     };
     setSoldItems((prevItems) => [newSale, ...prevItems]);
 
@@ -96,6 +120,52 @@ export default function SalesPage() {
     onPrintError: () => toast({title: "Print Error", description: "Could not print receipt.", variant: "destructive"}),
   });
 
+  // --- Top-Up Card Functions for SaleForm ---
+  const findCardById = useCallback((cardId: string): TopUpCard | undefined => {
+    return topUpCards.find(c => c.cardId.toUpperCase() === cardId.toUpperCase());
+  }, [topUpCards]);
+
+  const deductFromCardBalance = useCallback((cardId: string, amount: number, notes: string): boolean => {
+    let success = false;
+    setTopUpCards(prevCards =>
+      prevCards.map(c => {
+        if (c.cardId === cardId) {
+          if (c.currentBalance < amount) {
+            // This case should ideally be caught in SaleForm, but double-check here.
+            toast({ title: 'Insufficient Balance', description: `Card ${cardId} has only ${formatCurrency(c.currentBalance)}. Deduction failed.`, variant: 'destructive' });
+            success = false;
+            return c;
+          }
+          const newBalance = c.currentBalance - amount;
+          const newTransaction: CardTransaction = {
+            id: crypto.randomUUID(),
+            cardId,
+            timestamp: new Date().toISOString(),
+            type: 'Purchase',
+            amount: -amount, 
+            balanceBefore: c.currentBalance,
+            balanceAfter: newBalance,
+            staffMember: 'Staff User', // Placeholder
+            notes,
+          };
+          setCardTransactions(prevTx => [newTransaction, ...prevTx]);
+          success = true;
+          return { ...c, currentBalance: newBalance, lastUpdatedAt: new Date().toISOString() };
+        }
+        return c;
+      })
+    );
+    if (success) {
+      toast({ title: 'Card Payment Processed', description: `${formatCurrency(amount)} deducted from card ${cardId}.` });
+    }
+    return success;
+  }, [toast]); // `topUpCards` and `cardTransactions` state setters are stable
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+  };
+
+
   if (!isMounted) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-150px)]">
@@ -110,7 +180,7 @@ export default function SalesPage() {
         <header className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight">Sales Management</h1>
           <CardDescription className="text-muted-foreground text-md">
-            Record new sales and view sales history.
+            Record new sales and view sales history. Pay using cash, card, or customer top-up cards.
           </CardDescription>
         </header>
 
@@ -121,7 +191,8 @@ export default function SalesPage() {
                 onRecordSale={handleRecordSale} 
                 soldItemsForAISuggestion={isMounted ? recentItemsForAI : []}
                 availableProducts={isMounted ? products : []}
-                // currentStaffId and currentStaffName props removed
+                findCardById={findCardById}
+                onDeductFromCard={deductFromCardBalance}
               />
             </div>
             <div className="lg:col-span-3">
