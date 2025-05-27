@@ -1,3 +1,4 @@
+
 // src/app/settings/page.tsx
 "use client";
 
@@ -132,6 +133,13 @@ export default function SettingsPage() {
               toast({ title: "Dark Mode " + (savedData.darkMode ? "Enabled" : "Disabled") });
             },0);
              queryClient.invalidateQueries({ queryKey: ['appSettings', APP_SETTINGS_DOC_ID]});
+        },
+        onError: (error) => { // Add onError specifically for darkMode toggle if needed
+            toast({
+                title: 'Error Updating Dark Mode',
+                description: error.message || 'Could not save dark mode preference.',
+                variant: 'destructive',
+            });
         }
     });
   };

@@ -1,3 +1,4 @@
+
 // src/components/PurchaseOrderTable.tsx
 "use client";
 
@@ -32,9 +33,10 @@ interface PurchaseOrderTableProps {
   purchaseOrders: PurchaseOrder[];
   onEdit: (order: PurchaseOrder) => void;
   onDelete: (orderId: string) => void;
+  isLoading?: boolean; // Added isLoading prop
 }
 
-export function PurchaseOrderTable({ purchaseOrders, onEdit, onDelete }: PurchaseOrderTableProps) {
+export function PurchaseOrderTable({ purchaseOrders, onEdit, onDelete, isLoading = false }: PurchaseOrderTableProps) {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
@@ -54,7 +56,7 @@ export function PurchaseOrderTable({ purchaseOrders, onEdit, onDelete }: Purchas
       case 'Pending':
         return 'secondary';
       case 'Received':
-        return 'default'; // default is usually primary
+        return 'default'; 
       case 'Cancelled':
         return 'destructive';
       default:
@@ -95,13 +97,13 @@ export function PurchaseOrderTable({ purchaseOrders, onEdit, onDelete }: Purchas
               <TableCell className="text-right font-semibold">{formatCurrency(order.grandTotal)}</TableCell>
               <TableCell className="text-center">
                 <div className="flex justify-center items-center space-x-2">
-                  <Button variant="outline" size="icon" onClick={() => onEdit(order)}>
+                  <Button variant="outline" size="icon" onClick={() => onEdit(order)} disabled={isLoading}>
                     <Edit className="h-4 w-4" />
                     <span className="sr-only">Edit Order</span>
                   </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="destructive" size="icon">
+                      <Button variant="destructive" size="icon" disabled={isLoading}>
                         <Trash2 className="h-4 w-4" />
                         <span className="sr-only">Delete Order</span>
                       </Button>

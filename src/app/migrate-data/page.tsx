@@ -129,8 +129,10 @@ export default function MigrateDataPage() {
       }
     } catch (error: any) {
       console.error(`Error migrating ${localStorageKey}:`, error);
-      toast({ title: 'Migration Error', description: `Failed to migrate ${migrationItems.find(m=>m.key === itemKey)?.name}: ${error.message}`, variant: 'destructive' });
-      updateItemStatus(itemKey, 'error', 0, error.message);
+      const itemName = migrationItems.find(m=>m.key === itemKey)?.name || 'data';
+      const errorMessage = error.message || `An unknown error occurred during migration of ${itemName}.`;
+      toast({ title: 'Migration Error', description: `Failed to migrate ${itemName}: ${errorMessage}`, variant: 'destructive' });
+      updateItemStatus(itemKey, 'error', 0, errorMessage);
     }
   };
   

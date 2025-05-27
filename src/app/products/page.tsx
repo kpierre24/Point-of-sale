@@ -1,3 +1,4 @@
+
 // src/app/products/page.tsx
 "use client";
 
@@ -109,7 +110,7 @@ export default function ProductsPage() {
       setProductToEdit(null);
     },
     onError: (error) => {
-      toast({ title: 'Error Saving Product', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error Saving Product', description: error.message || 'An unexpected error occurred.', variant: 'destructive' });
     },
   });
 
@@ -124,7 +125,7 @@ export default function ProductsPage() {
       toast({ title: 'Product Deleted', description: 'The product has been removed.', variant: 'destructive' });
     },
     onError: (error) => {
-      toast({ title: 'Error Deleting Product', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error Deleting Product', description: error.message || 'An unexpected error occurred.', variant: 'destructive' });
     },
   });
 

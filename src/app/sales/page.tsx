@@ -1,3 +1,4 @@
+
 // src/app/sales/page.tsx
 "use client";
 
@@ -105,12 +106,12 @@ export default function SalesPage() {
   });
 
   useEffect(() => {
-    if (isSalesError) toast({ title: 'Error Loading Sales', description: salesError?.message, variant: 'destructive' });
-    if (isProductsError) toast({ title: 'Error Loading Products', description: productsError?.message, variant: 'destructive' });
-    if (isTopUpCardsError) toast({ title: 'Error Loading Top-Up Cards', description: topUpCardsError?.message, variant: 'destructive' });
+    if (isSalesError) toast({ title: 'Error Loading Sales', description: salesError?.message || 'An unexpected error occurred.', variant: 'destructive' });
+    if (isProductsError) toast({ title: 'Error Loading Products', description: productsError?.message || 'An unexpected error occurred.', variant: 'destructive' });
+    if (isTopUpCardsError) toast({ title: 'Error Loading Top-Up Cards', description: topUpCardsError?.message || 'An unexpected error occurred.', variant: 'destructive' });
   }, [isSalesError, salesError, isProductsError, productsError, isTopUpCardsError, topUpCardsError, toast]);
 
-  const recordSaleMutation = useMutation<void, Error, { newSaleData: Omit<SoldProduct, "id" | "timestamp" | "staffId" | "staffName">; paymentCardToUpdate?: TopUpCard; saleTotal?: number }>({
+  const recordSaleMutation = useMutation<SoldProduct, Error, { newSaleData: Omit<SoldProduct, "id" | "timestamp" | "staffId" | "staffName">; paymentCardToUpdate?: TopUpCard; saleTotal?: number }>({
     mutationFn: async ({ newSaleData, paymentCardToUpdate, saleTotal }) => {
       if (!db) throw new Error("Firestore not available");
       const batch = writeBatch(db);
@@ -161,21 +162,20 @@ export default function SalesPage() {
       }
 
       await batch.commit();
-      return newSale as any; // To pass to onSuccess for receiptData
+      return newSale; // Return newSale to pass to onSuccess
     },
-    onSuccess: (newSaleResult: any) => { // newSaleResult is actually the newSale object from mutationFn
+    onSuccess: (newSaleResult) => { 
       queryClient.invalidateQueries({ queryKey: [SALES_COLLECTION] });
       queryClient.invalidateQueries({ queryKey: [PRODUCTS_COLLECTION] });
       queryClient.invalidateQueries({ queryKey: [TOPUP_CARDS_COLLECTION] });
       queryClient.invalidateQueries({ queryKey: [CARD_TRANSACTIONS_COLLECTION] });
       
-      const actualNewSale = newSaleResult as SoldProduct;
-      setReceiptData(actualNewSale);
+      setReceiptData(newSaleResult);
       setIsReceiptModalOpen(true);
-      toast({ title: "Sale Recorded", description: `${actualNewSale.name} (x${actualNewSale.quantity}) added to history.` });
+      toast({ title: "Sale Recorded", description: `${newSaleResult.name} (x${newSaleResult.quantity}) added to history.` });
     },
     onError: (error) => {
-      toast({ title: 'Error Recording Sale', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error Recording Sale', description: error.message || 'An unexpected error occurred.', variant: 'destructive' });
     }
   });
 

@@ -1,3 +1,4 @@
+
 // src/app/customers/page.tsx
 "use client";
 
@@ -86,10 +87,10 @@ export default function CustomersPage() {
 
   useEffect(() => {
     if (isCustomersError) {
-      toast({ title: 'Error Loading Customers', description: customersError?.message, variant: 'destructive' });
+      toast({ title: 'Error Loading Customers', description: customersError?.message || 'An unexpected error occurred.', variant: 'destructive' });
     }
     if (isTopUpCardsError) {
-      toast({ title: 'Error Loading Top-Up Cards', description: topUpCardsError?.message, variant: 'destructive' });
+      toast({ title: 'Error Loading Top-Up Cards', description: topUpCardsError?.message || 'An unexpected error occurred.', variant: 'destructive' });
     }
   }, [isCustomersError, customersError, isTopUpCardsError, topUpCardsError, toast]);
 
@@ -150,7 +151,7 @@ export default function CustomersPage() {
       setCustomerToEdit(null);
     },
     onError: (error) => {
-      toast({ title: 'Error Saving Customer', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error Saving Customer', description: error.message || 'An unexpected error occurred.', variant: 'destructive' });
     },
   });
 
@@ -168,7 +169,7 @@ export default function CustomersPage() {
       }, 0);
     },
     onError: (error) => {
-      toast({ title: 'Error Deleting Customer', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error Deleting Customer', description: error.message || 'An unexpected error occurred.', variant: 'destructive' });
     },
   });
 
