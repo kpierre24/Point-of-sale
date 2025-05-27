@@ -95,3 +95,26 @@ export interface BuiltProductRecipe {
   outputProductName?: string; 
   outputProductDescription?: string; 
 }
+
+// Types for Top-Up Card Feature
+export interface TopUpCard {
+  id: string; // Internal UUID for React keys, NOT the cardId for QR
+  cardId: string; // User-facing, unique, human-readable ID for QR code
+  customerId?: string; // Optional link to existing Customer
+  currentBalance: number;
+  qrCodeValue: string; // This will just be the cardId
+  createdAt: string; // ISO Date string
+  lastUpdatedAt: string; // ISO Date string
+}
+
+export interface CardTransaction {
+  id: string; // UUID for the transaction itself
+  cardId: string; // Links to TopUpCard.cardId (the user-facing ID)
+  timestamp: string; // ISO Date string
+  type: 'Creation' | 'Top-Up' | 'Purchase' | 'Adjustment';
+  amount: number; // Positive for Top-Up/Creation, can be negative for Purchase/Adjustment if needed for flexibility, but UI will enforce positive for deduct
+  balanceBefore: number;
+  balanceAfter: number;
+  staffMember?: string; // Name or ID of staff, optional
+  notes?: string;
+}

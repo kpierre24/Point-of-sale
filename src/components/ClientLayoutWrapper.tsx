@@ -28,6 +28,7 @@ import {
   Settings as SettingsIcon, 
   Home,
   FileText,
+  CreditCard, // Added CreditCard icon
 } from 'lucide-react';
 // Removed LogOut, UserCircle2, Avatar, Skeleton, useAuth
 
@@ -45,6 +46,7 @@ const navItems: NavItem[] = [
   { href: '/recipes', icon: ClipboardList, label: 'Recipes', tooltip: 'Manage Product Recipes/Builds' },
   { href: '/purchases', icon: Truck, label: 'Purchases', tooltip: 'Manage Stock Purchases' },
   { href: '/customers', icon: Users, label: 'Customers', tooltip: 'Manage Customers' },
+  { href: '/topup-cards', icon: CreditCard, label: 'Top-Up Cards', tooltip: 'Manage Customer Top-Up Cards' }, // Added Top-Up Cards
   { href: '/reports', icon: FileText, label: 'Reports', tooltip: 'View Business Reports' },
   { href: '/users', icon: UserCog, label: 'Staff', tooltip: 'Manage Staff Users' },
 ];
