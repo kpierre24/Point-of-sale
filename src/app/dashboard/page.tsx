@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { DollarSign, Package, Users, Loader2, ShoppingCart } from "lucide-react";
+import { DollarSign, Package, Users, Loader2, ShoppingCart, WifiOff } from "lucide-react";
 import type { Product, Customer, SoldProduct, DailySalesData, ProductCategorySalesData } from '@/types';
 import { useRouter } from 'next/navigation';
 import { DailySalesChart } from '@/components/charts/DailySalesChart';
@@ -13,6 +13,7 @@ import { subDays, formatISO, parseISO, startOfDay } from 'date-fns';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query as firestoreQuery, orderBy, limit } from 'firebase/firestore';
 import { useQuery } from '@tanstack/react-query';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const PRODUCTS_COLLECTION = 'products';
 const CUSTOMERS_COLLECTION = 'customers';
@@ -37,8 +38,6 @@ const fetchCustomers = async (): Promise<Customer[]> => {
 
 const fetchSales = async (): Promise<SoldProduct[]> => {
   if (!db) throw new Error("Firestore not available");
-  // Fetch all sales for dashboard calculations. For performance on large datasets,
-  // consider server-side aggregations or more limited queries.
   const salesQuery = firestoreQuery(collection(db, SALES_COLLECTION), orderBy("timestamp", "desc"));
   const snapshot = await getDocs(salesQuery);
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SoldProduct));
@@ -48,23 +47,25 @@ const fetchSales = async (): Promise<SoldProduct[]> => {
 export default function DashboardPage() {
   const router = useRouter();
   
-  const { data: products = [], isLoading: isLoadingProducts, isError: isProductsError } = useQuery<Product[], Error>({
+  const { data: products = [], isLoading: isLoadingProducts, isError: isProductsError, error: productsError } = useQuery<Product[], Error>({
     queryKey: [PRODUCTS_COLLECTION],
     queryFn: fetchProducts,
     enabled: !!db,
+    retry: false,
   });
-  const { data: customers = [], isLoading: isLoadingCustomers, isError: isCustomersError } = useQuery<Customer[], Error>({
+  const { data: customers = [], isLoading: isLoadingCustomers, isError: isCustomersError, error: customersError } = useQuery<Customer[], Error>({
     queryKey: [CUSTOMERS_COLLECTION],
     queryFn: fetchCustomers,
     enabled: !!db,
+    retry: false,
   });
-  const { data: sales = [], isLoading: isLoadingSales, isError: isSalesError } = useQuery<SoldProduct[], Error>({
+  const { data: sales = [], isLoading: isLoadingSales, isError: isSalesError, error: salesError } = useQuery<SoldProduct[], Error>({
     queryKey: [SALES_COLLECTION],
     queryFn: fetchSales,
     enabled: !!db,
+    retry: false,
   });
 
-  // Derived states for dashboard cards and charts
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [totalSalesCount, setTotalSalesCount] = useState(0);
   const [productsInStockCount, setProductsInStockCount] = useState(0);
@@ -73,7 +74,7 @@ export default function DashboardPage() {
   const [topCategoriesData, setTopCategoriesData] = useState<ProductCategorySalesData[]>([]);
 
   useEffect(() => {
-    if (isLoadingProducts || isLoadingCustomers || isLoadingSales) return;
+    if (isLoadingProducts || isLoadingCustomers || isLoadingSales || isProductsError || isCustomersError || isSalesError) return;
 
     let revenue = 0;
     sales.forEach(sale => revenue += sale.total);
@@ -84,7 +85,6 @@ export default function DashboardPage() {
     setProductsInStockCount(stockCount);
     setCustomerCount(customers.length);
 
-    // Prepare data for DailySalesChart (last 7 days)
     const today = startOfDay(new Date());
     const last7DaysData: DailySalesData[] = [];
     for (let i = 6; i >= 0; i--) {
@@ -98,7 +98,6 @@ export default function DashboardPage() {
     }
     setDailySalesData(last7DaysData);
 
-    // Prepare data for TopCategoriesChart
     const categorySales: { [key: string]: number } = {};
     sales.forEach(sale => {
       const productDetails = products.find(p => p.id === sale.productId);
@@ -112,10 +111,10 @@ export default function DashboardPage() {
       
     setTopCategoriesData(sortedCategories.slice(0, 5));
 
-  }, [products, customers, sales, isLoadingProducts, isLoadingCustomers, isLoadingSales]);
+  }, [products, customers, sales, isLoadingProducts, isLoadingCustomers, isLoadingSales, isProductsError, isCustomersError, isSalesError]);
 
 
-  if (!db && (isProductsError || isCustomersError || isSalesError)) {
+  if (!db) { // Check for db initialization first
      return (
       <div className="space-y-8">
         <Card className="border-destructive">
@@ -135,6 +134,24 @@ export default function DashboardPage() {
     );
   }
 
+  if (isProductsError || isCustomersError || isSalesError) {
+    const combinedError = productsError?.message || customersError?.message || salesError?.message || "An error occurred fetching dashboard data.";
+    return (
+      <div className="space-y-8">
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+        </header>
+        <Alert variant="destructive">
+          <WifiOff className="h-5 w-5" />
+          <AlertTitle>Failed to Load Dashboard Data</AlertTitle>
+          <AlertDescription>
+            Could not connect to the database to load required data. Please check your internet connection and Firebase configuration.
+            <p className="mt-2 text-xs">Error: {combinedError}</p>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

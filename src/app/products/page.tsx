@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { PlusCircle, Edit, Trash2, Image as ImageIcon, Download, Loader2 } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, Image as ImageIcon, Download, Loader2, WifiOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
 import {
@@ -33,6 +33,7 @@ import {
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, orderBy, query as firestoreQuery } from 'firebase/firestore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const PRODUCTS_COLLECTION = 'products';
 const RECIPES_COLLECTION = 'recipes';
@@ -52,7 +53,6 @@ const escapeCsvField = (field: any): string => {
 const fetchProducts = async (): Promise<Product[]> => {
   if (!db) throw new Error("Firestore not available");
   const productsCol = collection(db, PRODUCTS_COLLECTION);
-  // Example: Order by name, adjust if you have a 'createdAt' or similar field for sorting by addition time
   const q = firestoreQuery(productsCol, orderBy("name")); 
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
@@ -76,19 +76,21 @@ export default function ProductsPage() {
     queryKey: [PRODUCTS_COLLECTION],
     queryFn: fetchProducts,
     enabled: !!db,
+    retry: false,
   });
 
   const { data: availableRecipes = [], isLoading: isLoadingRecipes, isError: isRecipesError, error: recipesError } = useQuery<BuiltProductRecipe[], Error>({
     queryKey: [RECIPES_COLLECTION],
     queryFn: fetchRecipes,
     enabled: !!db,
+    retry: false,
   });
   
   useEffect(() => {
-    if (isProductsError) {
+    if (isProductsError && productsError) {
       toast({ title: 'Error Loading Products', description: productsError?.message || 'Could not fetch products.', variant: 'destructive' });
     }
-    if (isRecipesError) {
+    if (isRecipesError && recipesError) {
       toast({ title: 'Error Loading Recipes', description: recipesError?.message || 'Could not fetch recipes.', variant: 'destructive' });
     }
   }, [isProductsError, productsError, isRecipesError, recipesError, toast]);
@@ -98,7 +100,7 @@ export default function ProductsPage() {
     mutationFn: async ({ product, isEditing }) => {
       if (!db) throw new Error("Firestore not available");
       const productRef = doc(db, PRODUCTS_COLLECTION, product.id);
-      await setDoc(productRef, product, { merge: isEditing }); // merge true for updates, false for new (though setDoc creates if not exists)
+      await setDoc(productRef, product, { merge: isEditing }); 
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [PRODUCTS_COLLECTION] });
@@ -188,12 +190,42 @@ export default function ProductsPage() {
     );
   }
 
-
   if (isLoadingProducts || isLoadingRecipes) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
         <p className="ml-4 text-lg">Loading product data...</p>
+      </div>
+    );
+  }
+
+  if (isProductsError || isRecipesError) {
+    const combinedError = productsError?.message || recipesError?.message || "An error occurred loading product data.";
+    return (
+      <div className="space-y-8">
+        <header className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Product Management</h1>
+          </div>
+           <div className="flex items-center space-x-2">
+             <Button onClick={handleExportProducts} variant="outline" disabled={true}>
+                <Download className="mr-2 h-4 w-4" />
+                Export Products
+            </Button>
+            <Button onClick={handleAddNewProduct} disabled={true}>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Add Product
+            </Button>
+           </div>
+        </header>
+        <Alert variant="destructive">
+          <WifiOff className="h-5 w-5" />
+          <AlertTitle>Failed to Load Product Data</AlertTitle>
+          <AlertDescription>
+            Could not connect to the database to load products or recipes. Please check your internet connection and Firebase configuration.
+            <p className="mt-2 text-xs">Error: {combinedError}</p>
+          </AlertDescription>
+        </Alert>
       </div>
     );
   }

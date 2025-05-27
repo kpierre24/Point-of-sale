@@ -11,10 +11,11 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { APP_TITLE, TAX_RATE as DEFAULT_TAX_RATE_PERCENT } from '@/config/constants';
-import { Save, Loader2 } from 'lucide-react';
+import { Save, Loader2, WifiOff } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const APP_SETTINGS_DOC_ID = 'current'; // Document ID for app settings in Firestore
 
@@ -58,11 +59,12 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: settings, isLoading: isLoadingSettings, isError, error } = useQuery<AppSettings, Error>({
+  const { data: settings, isLoading: isLoadingSettings, isError, error: queryError } = useQuery<AppSettings, Error>({
     queryKey: ['appSettings', APP_SETTINGS_DOC_ID],
     queryFn: fetchAppSettings,
     enabled: !!db, // Only run query if db is initialized
     initialData: defaultSettings, // Provide initial data to prevent undefined state
+    retry: false, // Prevent retries if it's an offline/config issue
     onSuccess: (loadedSettings) => {
         if (loadedSettings.darkMode) {
             document.documentElement.classList.add('dark');
@@ -72,7 +74,6 @@ export default function SettingsPage() {
     }
   });
   
-  // Local form state, initialized from query data or defaults
   const [formState, setFormState] = useState<AppSettings>(settings || defaultSettings);
 
   useEffect(() => {
@@ -90,7 +91,7 @@ export default function SettingsPage() {
   const mutation = useMutation<AppSettings, Error, AppSettings>({
     mutationFn: saveAppSettings,
     onSuccess: (savedData) => {
-      queryClient.setQueryData(['appSettings', APP_SETTINGS_DOC_ID], savedData); // Update cache
+      queryClient.setQueryData(['appSettings', APP_SETTINGS_DOC_ID], savedData); 
       if (savedData.darkMode) {
         document.documentElement.classList.add('dark');
       } else {
@@ -100,8 +101,6 @@ export default function SettingsPage() {
         title: 'Settings Saved',
         description: 'Your application settings have been updated.',
       });
-       // Force re-fetch in ClientLayoutWrapper by invalidating or directly triggering a refresh there if necessary.
-       // For now, relying on navigation or full reload to pick up title changes in ClientLayoutWrapper.
        queryClient.invalidateQueries({ queryKey: ['appSettings', APP_SETTINGS_DOC_ID]});
     },
     onError: (saveError) => {
@@ -120,9 +119,7 @@ export default function SettingsPage() {
 
   const handleDarkModeToggle = (checked: boolean) => {
     const newSettings = { ...formState, darkMode: checked };
-    setFormState(newSettings); // Update local form state immediately for responsiveness
-    // The actual save will happen via the Save button or a separate save action for dark mode if preferred
-    // For now, dark mode toggle also triggers a save for immediate effect.
+    setFormState(newSettings); 
     mutation.mutate(newSettings, {
         onSuccess: (savedData) => {
              queryClient.setQueryData(['appSettings', APP_SETTINGS_DOC_ID], savedData);
@@ -145,17 +142,28 @@ export default function SettingsPage() {
   };
   
   useEffect(() => {
-    if (isError && error) {
+    if (queryError) {
       toast({
         title: 'Error Loading Settings',
-        description: error.message || 'Could not load settings from Firestore.',
+        description: queryError.message || 'Could not load settings from Firestore.',
         variant: 'destructive',
       });
     }
-  }, [isError, error, toast]);
+  }, [queryError, toast]);
 
 
-  if (isLoadingSettings && !settings) { // Show loader only if settings are not yet available
+  if (!db) {
+    return (
+      <div className="space-y-8">
+        <Card className="border-destructive">
+          <CardHeader><CardTitle className="text-destructive">Firebase Not Connected</CardTitle></CardHeader>
+          <CardContent><p>Cannot load or save settings. Please ensure your Firebase project is correctly configured.</p></CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isLoadingSettings && !settings) { 
     return (
       <div className="space-y-8">
         <header className="mb-8">
@@ -168,6 +176,38 @@ export default function SettingsPage() {
       </div>
     );
   }
+  
+  if (isError && queryError) {
+    return (
+      <div className="space-y-8">
+         <header className="mb-8">
+          <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+          <p className="text-muted-foreground text-md">
+            Configure application settings and preferences.
+          </p>
+        </header>
+        <Alert variant="destructive" className="mt-4">
+          <WifiOff className="h-5 w-5" />
+          <AlertTitle>Failed to Load Settings</AlertTitle>
+          <AlertDescription>
+            Could not connect to the database to load your settings. Please check your internet connection and Firebase configuration.
+            <p className="mt-2 text-xs">Error details: {queryError.message}</p>
+          </AlertDescription>
+        </Alert>
+        <Card>
+          <CardHeader>
+            <CardTitle>Store & General Settings (Offline)</CardTitle>
+            <CardDescription>Settings cannot be saved while offline.</CardDescription>
+          </CardHeader>
+           <CardContent className="opacity-50 pointer-events-none">
+            {/* Render a disabled form or a message */}
+            <p>The settings form is unavailable due to a connection issue.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
 
   return (
     <div className="space-y-8">
@@ -177,19 +217,6 @@ export default function SettingsPage() {
           Configure application settings and preferences. Data is saved to Firestore.
         </p>
       </header>
-      {!db && (
-         <Card className="border-destructive">
-          <CardHeader>
-            <CardTitle className="text-destructive">Firebase Not Connected</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-destructive-foreground">
-              Cannot load or save settings. Please ensure your Firebase project is correctly configured
-              in <code>.env.local</code> and the development server has been restarted.
-            </p>
-          </CardContent>
-        </Card>
-      )}
       
       <form onSubmit={handleSaveSettings}>
         <Card>
