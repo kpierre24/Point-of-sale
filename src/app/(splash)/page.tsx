@@ -6,38 +6,51 @@ import { useRouter } from 'next/navigation';
 import { Loader2, ShoppingCart } from 'lucide-react'; 
 import { APP_TITLE as DEFAULT_APP_TITLE } from '@/config/constants';
 import type { AppSettings } from '@/types';
+import { db } from '@/lib/firebase'; // Added
+import { doc, getDoc } from 'firebase/firestore'; // Added
 
-const APP_SETTINGS_KEY = 'appSettings';
+const APP_SETTINGS_DOC_ID = 'current'; // Document ID for app settings in Firestore
 
 export default function SplashPage() {
   const router = useRouter();
   const [appTitle, setAppTitle] = useState(DEFAULT_APP_TITLE);
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
 
   useEffect(() => {
-    const storedSettings = localStorage.getItem(APP_SETTINGS_KEY);
-    if (storedSettings) {
-      try {
-        const parsedSettings: AppSettings = JSON.parse(storedSettings);
-        if (parsedSettings.storeName) {
-          setAppTitle(parsedSettings.storeName);
-          document.title = `${parsedSettings.storeName} - Loading`;
-        } else {
+    const fetchAppSettingsAndRedirect = async () => {
+      setIsLoadingSettings(true);
+      if (db) {
+        try {
+          const settingsDocRef = doc(db, 'appSettings', APP_SETTINGS_DOC_ID);
+          const docSnap = await getDoc(settingsDocRef);
+          if (docSnap.exists()) {
+            const parsedSettings = docSnap.data() as AppSettings;
+            if (parsedSettings.storeName) {
+              setAppTitle(parsedSettings.storeName);
+              document.title = `${parsedSettings.storeName} - Loading`;
+            } else {
+              document.title = `${DEFAULT_APP_TITLE} - Loading`;
+            }
+          } else {
+             document.title = `${DEFAULT_APP_TITLE} - Loading`;
+          }
+        } catch (e) {
+          console.error("Failed to fetch settings for splash title from Firestore", e);
           document.title = `${DEFAULT_APP_TITLE} - Loading`;
         }
-      } catch (e) {
-        console.error("Failed to parse settings for splash title", e);
+      } else {
+        console.warn("Firestore not available on splash page. Using default title.");
         document.title = `${DEFAULT_APP_TITLE} - Loading`;
       }
-    } else {
-        document.title = `${DEFAULT_APP_TITLE} - Loading`;
-    }
+      setIsLoadingSettings(false);
 
-
-    const timer = setTimeout(() => {
-      router.replace('/dashboard');
-    }, 1500); 
-
-    return () => clearTimeout(timer);
+      const timer = setTimeout(() => {
+        router.replace('/dashboard');
+      }, 1500); 
+      return () => clearTimeout(timer);
+    };
+    
+    fetchAppSettingsAndRedirect();
   }, [router]);
 
   return (
@@ -45,7 +58,7 @@ export default function SplashPage() {
       <div className="text-center p-8 rounded-lg shadow-2xl bg-background/10 backdrop-blur-sm">
         <ShoppingCart className="h-24 w-24 mx-auto mb-6 text-primary-foreground drop-shadow-lg" />
         <h1 className="text-5xl font-bold mb-3 tracking-tight drop-shadow-md">
-          {appTitle}
+          {isLoadingSettings ? DEFAULT_APP_TITLE : appTitle}
         </h1>
         <p className="text-xl text-primary-foreground/90 mb-8 drop-shadow-sm">
           Your Modern Point of Sale Solution
@@ -56,7 +69,7 @@ export default function SplashPage() {
         </div>
       </div>
       <footer className="absolute bottom-4 text-center w-full text-sm text-primary-foreground/70">
-        &copy; {new Date().getFullYear()} {appTitle}. All rights reserved.
+        &copy; {new Date().getFullYear()} {isLoadingSettings ? DEFAULT_APP_TITLE : appTitle}. All rights reserved.
       </footer>
     </div>
   );

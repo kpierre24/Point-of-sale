@@ -4,58 +4,84 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BarChart, DollarSign, Package, Users, Loader2, ShoppingCart } from "lucide-react";
+import { DollarSign, Package, Users, Loader2, ShoppingCart } from "lucide-react";
 import type { Product, Customer, SoldProduct, DailySalesData, ProductCategorySalesData } from '@/types';
 import { useRouter } from 'next/navigation';
 import { DailySalesChart } from '@/components/charts/DailySalesChart';
 import { TopCategoriesChart } from '@/components/charts/TopCategoriesChart';
-import { subDays, formatISO, startOfDay, isAfter, parseISO, endOfDay } from 'date-fns';
+import { subDays, formatISO, parseISO, startOfDay } from 'date-fns';
+import { db } from '@/lib/firebase';
+import { collection, getDocs, query as firestoreQuery, orderBy, limit } from 'firebase/firestore';
+import { useQuery } from '@tanstack/react-query';
+
+const PRODUCTS_COLLECTION = 'products';
+const CUSTOMERS_COLLECTION = 'customers';
+const SALES_COLLECTION = 'sales';
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 };
 
+// Fetcher functions
+const fetchProducts = async (): Promise<Product[]> => {
+  if (!db) throw new Error("Firestore not available");
+  const snapshot = await getDocs(collection(db, PRODUCTS_COLLECTION));
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+};
+
+const fetchCustomers = async (): Promise<Customer[]> => {
+  if (!db) throw new Error("Firestore not available");
+  const snapshot = await getDocs(collection(db, CUSTOMERS_COLLECTION));
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Customer));
+};
+
+const fetchSales = async (): Promise<SoldProduct[]> => {
+  if (!db) throw new Error("Firestore not available");
+  // Fetch all sales for dashboard calculations. For performance on large datasets,
+  // consider server-side aggregations or more limited queries.
+  const salesQuery = firestoreQuery(collection(db, SALES_COLLECTION), orderBy("timestamp", "desc"));
+  const snapshot = await getDocs(salesQuery);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SoldProduct));
+};
+
+
 export default function DashboardPage() {
   const router = useRouter();
+  
+  const { data: products = [], isLoading: isLoadingProducts, isError: isProductsError } = useQuery<Product[], Error>({
+    queryKey: [PRODUCTS_COLLECTION],
+    queryFn: fetchProducts,
+    enabled: !!db,
+  });
+  const { data: customers = [], isLoading: isLoadingCustomers, isError: isCustomersError } = useQuery<Customer[], Error>({
+    queryKey: [CUSTOMERS_COLLECTION],
+    queryFn: fetchCustomers,
+    enabled: !!db,
+  });
+  const { data: sales = [], isLoading: isLoadingSales, isError: isSalesError } = useQuery<SoldProduct[], Error>({
+    queryKey: [SALES_COLLECTION],
+    queryFn: fetchSales,
+    enabled: !!db,
+  });
+
+  // Derived states for dashboard cards and charts
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [totalSalesCount, setTotalSalesCount] = useState(0);
   const [productsInStockCount, setProductsInStockCount] = useState(0);
   const [customerCount, setCustomerCount] = useState(0);
-  
   const [dailySalesData, setDailySalesData] = useState<DailySalesData[]>([]);
   const [topCategoriesData, setTopCategoriesData] = useState<ProductCategorySalesData[]>([]);
-  
-  const [isDataLoading, setIsDataLoading] = useState(true);
-  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (!isMounted) return;
-
-    setIsDataLoading(true);
-    const storedSales = localStorage.getItem('soldItems');
-    const storedProducts = localStorage.getItem('products');
-    const storedCustomers = localStorage.getItem('customers');
+    if (isLoadingProducts || isLoadingCustomers || isLoadingSales) return;
 
     let revenue = 0;
-    let salesCount = 0;
-    const sales: SoldProduct[] = storedSales ? JSON.parse(storedSales) : [];
-    
-    sales.forEach(sale => {
-      revenue += sale.total;
-      salesCount += 1; 
-    });
+    sales.forEach(sale => revenue += sale.total);
     setTotalRevenue(revenue);
-    setTotalSalesCount(salesCount);
+    setTotalSalesCount(sales.length);
 
-    const products: Product[] = storedProducts ? JSON.parse(storedProducts) : [];
     const stockCount = products.filter(p => p.stockQuantity > 0).length; 
     setProductsInStockCount(stockCount);
-
-    const customers: Customer[] = storedCustomers ? JSON.parse(storedCustomers) : [];
     setCustomerCount(customers.length);
 
     // Prepare data for DailySalesChart (last 7 days)
@@ -84,12 +110,23 @@ export default function DashboardPage() {
       .map(([category, quantitySold]) => ({ category, quantitySold }))
       .sort((a, b) => b.quantitySold - a.quantitySold);
       
-    setTopCategoriesData(sortedCategories.slice(0, 5)); // Top 5 or fewer
+    setTopCategoriesData(sortedCategories.slice(0, 5));
 
-    setIsDataLoading(false);
-  }, [isMounted]);
+  }, [products, customers, sales, isLoadingProducts, isLoadingCustomers, isLoadingSales]);
 
-  if (!isMounted || isDataLoading) {
+
+  if (!db && (isProductsError || isCustomersError || isSalesError)) {
+     return (
+      <div className="space-y-8">
+        <Card className="border-destructive">
+          <CardHeader><CardTitle className="text-destructive">Firebase Not Connected</CardTitle></CardHeader>
+          <CardContent><p>Cannot load dashboard data. Please check Firebase configuration.</p></CardContent>
+        </Card>
+      </div>
+    );
+  }
+  
+  if (isLoadingProducts || isLoadingCustomers || isLoadingSales) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-150px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -98,12 +135,13 @@ export default function DashboardPage() {
     );
   }
 
+
   return (
     <div className="space-y-8">
       <header className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground text-md">
-          Welcome! Here's an overview of your business activity.
+          Welcome! Here's an overview of your business activity from Firestore.
         </p>
       </header>
 
@@ -123,7 +161,7 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
-            <ShoppingCart className="h-4 w-4 text-muted-foreground" /> {/* Changed icon */}
+            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalSalesCount}</div>
@@ -178,7 +216,7 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle> {/* Kept as placeholder for now */}
+            <CardTitle>Recent Activity</CardTitle> 
             <CardDescription>Overview of recent sales and stock movements.</CardDescription>
           </CardHeader>
           <CardContent>
@@ -192,7 +230,7 @@ export default function DashboardPage() {
             <CardTitle>Advanced Analytics</CardTitle>
         </CardHeader>
         <CardContent>
-            <p className="text-muted-foreground">More detailed reports and sales forecasting will be available here. Data for dashboard cards is currently sourced from local storage for demonstration.</p>
+            <p className="text-muted-foreground">More detailed reports and sales forecasting will be available here. Data for dashboard cards is sourced from Firestore.</p>
         </CardContent>
        </Card>
     </div>

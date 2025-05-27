@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { PlusCircle, Edit, Trash2, ClipboardList } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, ClipboardList, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -29,47 +29,73 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { db } from '@/lib/firebase';
+import { collection, getDocs, doc, setDoc, deleteDoc, query as firestoreQuery, orderBy } from 'firebase/firestore';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+const RECIPES_COLLECTION = 'recipes';
+
+// Fetcher function
+const fetchRecipes = async (): Promise<BuiltProductRecipe[]> => {
+  if (!db) throw new Error("Firestore not available");
+  const recipesCol = collection(db, RECIPES_COLLECTION);
+  const q = firestoreQuery(recipesCol, orderBy("name"));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BuiltProductRecipe));
+};
 
 export default function RecipesPage() {
-  const [recipes, setRecipes] = useState<BuiltProductRecipe[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [recipeToEdit, setRecipeToEdit] = useState<BuiltProductRecipe | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: recipes = [], isLoading, isError, error } = useQuery<BuiltProductRecipe[], Error>({
+    queryKey: [RECIPES_COLLECTION],
+    queryFn: fetchRecipes,
+    enabled: !!db,
+  });
 
   useEffect(() => {
-    setIsMounted(true);
-    const storedRecipes = localStorage.getItem('builtProductRecipes');
-    if (storedRecipes) {
-      try {
-        setRecipes(JSON.parse(storedRecipes));
-      } catch (e) {
-        console.error("Failed to parse recipes from localStorage", e);
-        setRecipes([]);
-      }
+    if (isError) {
+      toast({ title: 'Error Loading Recipes', description: error?.message, variant: 'destructive' });
     }
-  }, []);
+  }, [isError, error, toast]);
 
-  useEffect(() => {
-    if (isMounted) {
-      localStorage.setItem('builtProductRecipes', JSON.stringify(recipes));
-    }
-  }, [recipes, isMounted]);
+  const recipeMutation = useMutation<void, Error, { recipe: BuiltProductRecipe; isEditing: boolean }>({
+    mutationFn: async ({ recipe, isEditing }) => {
+      if (!db) throw new Error("Firestore not available");
+      const recipeRef = doc(db, RECIPES_COLLECTION, recipe.id);
+      await setDoc(recipeRef, recipe, { merge: isEditing });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [RECIPES_COLLECTION] });
+      toast({ title: variables.isEditing ? 'Recipe Updated' : 'Recipe Added', description: `Recipe "${variables.recipe.name}" has been saved.` });
+      setIsFormOpen(false);
+      setRecipeToEdit(null);
+    },
+    onError: (error) => {
+      toast({ title: 'Error Saving Recipe', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const deleteRecipeMutation = useMutation<void, Error, string>({
+    mutationFn: async (recipeId: string) => {
+      if (!db) throw new Error("Firestore not available");
+      await deleteDoc(doc(db, RECIPES_COLLECTION, recipeId));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [RECIPES_COLLECTION] });
+      toast({ title: 'Recipe Deleted', description: 'The recipe has been removed.', variant: 'destructive' });
+    },
+    onError: (error) => {
+      toast({ title: 'Error Deleting Recipe', description: error.message, variant: 'destructive' });
+    },
+  });
+
 
   const handleSaveRecipe = (recipe: BuiltProductRecipe) => {
-    setRecipes((prevRecipes) => {
-      const existingIndex = prevRecipes.findIndex((r) => r.id === recipe.id);
-      if (existingIndex > -1) {
-        const updatedRecipes = [...prevRecipes];
-        updatedRecipes[existingIndex] = recipe;
-        toast({ title: 'Recipe Updated', description: `Recipe "${recipe.name}" has been updated.` });
-        return updatedRecipes;
-      } else {
-        toast({ title: 'Recipe Added', description: `Recipe "${recipe.name}" has been added.` });
-        return [recipe, ...prevRecipes];
-      }
-    });
-    setRecipeToEdit(null);
+    recipeMutation.mutate({ recipe, isEditing: !!recipeToEdit });
   };
 
   const handleAddNewRecipe = () => {
@@ -83,13 +109,32 @@ export default function RecipesPage() {
   };
 
   const handleDeleteRecipe = (recipeId: string) => {
-    setRecipes((prevRecipes) => prevRecipes.filter((r) => r.id !== recipeId));
-    toast({ title: 'Recipe Deleted', description: 'The recipe has been removed.', variant: 'destructive' });
+    deleteRecipeMutation.mutate(recipeId);
   };
   
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
+
+  if (!db) {
+    return (
+      <div className="space-y-8">
+        <Card className="border-destructive">
+          <CardHeader><CardTitle className="text-destructive">Firebase Not Connected</CardTitle></CardHeader>
+          <CardContent><p>Cannot load recipes. Please check Firebase configuration.</p></CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-4 text-lg">Loading recipes...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -100,10 +145,10 @@ export default function RecipesPage() {
                 Product Recipes
             </h1>
             <p className="text-muted-foreground text-md">
-            Manage your product recipes and build configurations.
+            Manage your product recipes and build configurations. Data stored in Firestore.
             </p>
         </div>
-        <Button onClick={handleAddNewRecipe}>
+        <Button onClick={handleAddNewRecipe} disabled={recipeMutation.isPending}>
           <PlusCircle className="mr-2 h-4 w-4" />
           Add New Recipe
         </Button>
@@ -143,13 +188,13 @@ export default function RecipesPage() {
                     <TableCell className="text-right">{formatCurrency(recipe.totalCalculatedCost)}</TableCell>
                     <TableCell className="text-center">
                       <div className="flex justify-center items-center space-x-2">
-                        <Button variant="outline" size="icon" onClick={() => handleEditRecipe(recipe)}>
+                        <Button variant="outline" size="icon" onClick={() => handleEditRecipe(recipe)} disabled={recipeMutation.isPending || deleteRecipeMutation.isPending}>
                           <Edit className="h-4 w-4" />
                           <span className="sr-only">Edit Recipe</span>
                         </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="destructive" size="icon">
+                            <Button variant="destructive" size="icon" disabled={recipeMutation.isPending || deleteRecipeMutation.isPending}>
                               <Trash2 className="h-4 w-4" />
                               <span className="sr-only">Delete Recipe</span>
                             </Button>

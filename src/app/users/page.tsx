@@ -1,7 +1,7 @@
 // src/app/users/page.tsx
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import type { User as AppUser } from '@/types'; 
 import { Button } from '@/components/ui/button';
 import { UserForm } from '@/components/UserForm';
@@ -30,64 +30,119 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { db } from '@/lib/firebase';
+import { collection, getDocs, doc, setDoc, deleteDoc, query as firestoreQuery, orderBy } from 'firebase/firestore';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-const STAFF_USERS_STORAGE_KEY = 'staffUsers';
+const USERS_COLLECTION = 'users';
+
+// Fetcher function for React Query
+const fetchUsers = async (): Promise<AppUser[]> => {
+  if (!db) throw new Error("Firestore not available");
+  const usersCol = collection(db, USERS_COLLECTION);
+  const q = firestoreQuery(usersCol, orderBy("name"));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppUser));
+};
+
 
 export default function UsersPage() {
-  const [users, setUsers] = useState<AppUser[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [userToEdit, setUserToEdit] = useState<AppUser | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  const fetchUsers = useCallback(() => {
-    const storedUsers = localStorage.getItem(STAFF_USERS_STORAGE_KEY);
-    if (storedUsers) {
-      try {
-        setUsers(JSON.parse(storedUsers));
-      } catch (error) {
-        console.error("Error fetching users from localStorage:", error);
-        toast({ title: 'Error', description: 'Could not fetch user data.', variant: 'destructive' });
-        setUsers([]);
+  const { data: users = [], isLoading: isLoadingUsers, isError, error } = useQuery<AppUser[], Error>({
+    queryKey: [USERS_COLLECTION],
+    queryFn: fetchUsers,
+    enabled: !!db,
+  });
+
+  useEffect(() => {
+    if (isError) {
+      toast({ title: 'Error Loading Users', description: error?.message, variant: 'destructive' });
+    }
+  }, [isError, error, toast]);
+
+  const userMutation = useMutation<void, Error, { user: AppUser; isEditing: boolean }>({
+    mutationFn: async ({ user, isEditing }) => {
+      if (!db) throw new Error("Firestore not available");
+      const userToSave: AppUser = {
+        ...user,
+        id: isEditing ? user.id : crypto.randomUUID(), // Use existing ID if editing, else new UUID
+        pin: user.pin || Math.floor(100000 + Math.random() * 900000).toString(),
+      };
+      const userRef = doc(db, USERS_COLLECTION, userToSave.id);
+      await setDoc(userRef, userToSave, { merge: isEditing });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [USERS_COLLECTION] });
+      setTimeout(() => {
+        toast({ title: variables.isEditing ? 'User Updated' : 'User Added', description: `${variables.user.name} has been saved.` });
+      },0);
+      setIsFormOpen(false);
+      setUserToEdit(null);
+    },
+    onError: (error) => {
+      toast({ title: 'Error Saving User', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const deleteUserMutation = useMutation<void, Error, { userId: string; userName: string }>({
+    mutationFn: async ({ userId }) => {
+      if (!db) throw new Error("Firestore not available");
+      await deleteDoc(doc(db, USERS_COLLECTION, userId));
+    },
+    onSuccess: (_,variables) => {
+      queryClient.invalidateQueries({ queryKey: [USERS_COLLECTION] });
+      setTimeout(() => {
+        toast({ title: 'User Deleted', description: `${variables.userName}'s data has been removed.`, variant: 'destructive' });
+      },0);
+    },
+    onError: (error) => {
+      toast({ title: 'Error Deleting User', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const updateUserStatusMutation = useMutation<void, Error, AppUser>({
+      mutationFn: async (userToUpdate: AppUser) => {
+          if (!db) throw new Error("Firestore not available");
+          const userRef = doc(db, USERS_COLLECTION, userToUpdate.id);
+          await setDoc(userRef, userToUpdate, { merge: true });
+      },
+      onSuccess: (data, updatedUser) => {
+          queryClient.invalidateQueries({ queryKey: [USERS_COLLECTION] });
+          setTimeout(() => {
+            toast({ title: `User ${updatedUser.isActive ? 'Activated' : 'Deactivated'}`, description: `${updatedUser.name}'s status has been updated.` });
+          },0);
+      },
+      onError: (error) => {
+          toast({ title: 'Error Updating User Status', description: error.message, variant: 'destructive' });
       }
-    } else {
-      setUsers([]); // No users stored yet
+  });
+
+  const updateUserPinMutation = useMutation<void, Error, AppUser>({
+    mutationFn: async (userWithNewPin: AppUser) => {
+      if (!db) throw new Error("Firestore not available");
+      const userRef = doc(db, USERS_COLLECTION, userWithNewPin.id);
+      await setDoc(userRef, userWithNewPin, { merge: true });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [USERS_COLLECTION] });
+      setTimeout(() => {
+        toast({ title: 'PIN Updated', description: `User's PIN has been changed successfully.` });
+      },0);
+    },
+    onError: (error) => {
+      toast({ title: 'Error Updating PIN', description: error.message, variant: 'destructive' });
     }
-  }, [toast]);
+  });
 
-  useEffect(() => {
-    setIsMounted(true);
-    fetchUsers();
-  }, [fetchUsers]);
 
-  useEffect(() => {
-    if (isMounted) {
-      localStorage.setItem(STAFF_USERS_STORAGE_KEY, JSON.stringify(users));
-    }
-  }, [users, isMounted]);
-
-  const handleSaveUser = async (userFormData: AppUser) => {
-    const userToSave: AppUser = {
-        ...userFormData,
-        id: userToEdit?.id || crypto.randomUUID(), // Use existing ID if editing, else new UUID
-        pin: userFormData.pin || Math.floor(100000 + Math.random() * 900000).toString(),
-    };
-
-    setUsers(prevUsers => {
-        const existingIndex = prevUsers.findIndex(u => u.id === userToSave.id);
-        if (existingIndex > -1) {
-            const updatedUsers = [...prevUsers];
-            updatedUsers[existingIndex] = userToSave;
-            toast({ title: 'User Updated', description: `${userToSave.name} has been updated.` });
-            return updatedUsers;
-        } else {
-            toast({ title: 'User Added', description: `${userToSave.name} has been added.` });
-            return [userToSave, ...prevUsers];
-        }
-    });
-    
-    setUserToEdit(null);
-    setIsFormOpen(false);
+  const handleSaveUser = (userFormData: AppUser) => {
+    const isEditing = !!userToEdit;
+    const finalUserData = { ...userFormData, id: userToEdit?.id || userFormData.id || crypto.randomUUID() };
+    userMutation.mutate({ user: finalUserData, isEditing });
   };
 
   const handleAddNewUser = () => {
@@ -100,25 +155,23 @@ export default function UsersPage() {
     setIsFormOpen(true);
   };
 
-  const handleDeleteUser = async (userId: string) => {
+  const handleDeleteUser = (userId: string) => {
     const userToDelete = users.find(u => u.id === userId);
     if (!userToDelete) return;
-
-    setUsers(prevUsers => prevUsers.filter(u => u.id !== userId));
-    toast({ title: 'User Deleted', description: `${userToDelete.name}'s data has been removed.`, variant: 'destructive' });
+    deleteUserMutation.mutate({ userId, userName: userToDelete.name });
   };
 
-  const handleToggleActive = async (userId: string) => {
+  const handleToggleActive = (userId: string) => {
     const userToToggle = users.find(u => u.id === userId);
     if (!userToToggle) return;
-
-    const updatedUser = { ...userToToggle, isActive: !userToToggle.isActive };
-    setUsers(prevUsers => prevUsers.map(u => u.id === userId ? updatedUser : u));
-    toast({ title: `User ${updatedUser.isActive ? 'Activated' : 'Deactivated'}`, description: `${updatedUser.name}'s status has been updated.` });
+    updateUserStatusMutation.mutate({ ...userToToggle, isActive: !userToToggle.isActive });
   };
   
-  const handleChangePin = async (userId: string) => {
-    const newPin = prompt("Enter new 6-digit PIN for the user (leave blank to cancel):");
+  const handleChangePin = (userId: string) => {
+    const userToUpdate = users.find(u => u.id === userId);
+    if (!userToUpdate) return;
+
+    const newPin = prompt(`Enter new 6-digit PIN for ${userToUpdate.name} (leave blank to cancel):`);
     if (newPin === null) return; 
     if (!/^\d{6}$/.test(newPin) && newPin !== "") {
         toast({ title: 'Invalid PIN', description: 'PIN must be 6 digits.', variant: 'destructive' });
@@ -128,19 +181,24 @@ export default function UsersPage() {
         toast({ title: 'PIN Change Cancelled', description: 'No changes made to user PIN.' });
         return;
     }
-
-    const userToUpdate = users.find(u => u.id === userId);
-    if (!userToUpdate) return;
-
-    const updatedUser = { ...userToUpdate, pin: newPin };
-    setUsers(prevUsers => prevUsers.map(u => u.id === userId ? updatedUser : u));
-    toast({ title: 'PIN Updated', description: `User's PIN has been changed successfully.` });
+    updateUserPinMutation.mutate({ ...userToUpdate, pin: newPin });
   };
 
 
-  if (!isMounted) {
+  if (!db) {
     return (
-      <div className="flex items-center justify-center min-h-[calc(100vh-150px)]">
+      <div className="space-y-8">
+        <Card className="border-destructive">
+          <CardHeader><CardTitle className="text-destructive">Firebase Not Connected</CardTitle></CardHeader>
+          <CardContent><p>Cannot load staff data. Please check Firebase configuration.</p></CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isLoadingUsers) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
         <p className="ml-4 text-lg">Loading Staff Management...</p>
       </div>
@@ -153,10 +211,10 @@ export default function UsersPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Staff Management</h1>
           <p className="text-muted-foreground text-md">
-            Add, view, and manage staff accounts and roles.
+            Add, view, and manage staff accounts and roles. Data is stored in Firestore.
           </p>
         </div>
-        <Button onClick={handleAddNewUser}>
+        <Button onClick={handleAddNewUser} disabled={userMutation.isPending}>
           <UserCog className="mr-2 h-4 w-4" />
           Add Staff User
         </Button>
@@ -195,7 +253,7 @@ export default function UsersPage() {
                   <TableRow key={user.id}>
                     <TableCell className="font-medium">{user.name}</TableCell>
                     <TableCell>{user.email}</TableCell>
-                    <TableCell><Badge variant={user.role === 'Admin' ? 'default' : 'secondary'}>{user.role}</Badge></TableCell>
+                    <TableCell><Badge variant={user.role === 'Administrator' || user.role === 'Owner' ? 'default' : 'secondary'}>{user.role}</Badge></TableCell>
                     <TableCell>{ user.pin ? '****'+ user.pin.slice(-2) : 'Not Set'}</TableCell>
                     <TableCell className="text-center">
                       <Badge variant={user.isActive ? 'secondary' : 'outline'} className={user.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
@@ -204,7 +262,7 @@ export default function UsersPage() {
                     </TableCell>
                     <TableCell className="text-center">
                       <div className="flex justify-center items-center space-x-1">
-                        <Button variant="outline" size="icon" onClick={() => handleEditUser(user)} title="Edit User">
+                        <Button variant="outline" size="icon" onClick={() => handleEditUser(user)} title="Edit User" disabled={userMutation.isPending || deleteUserMutation.isPending || updateUserPinMutation.isPending || updateUserStatusMutation.isPending}>
                           <Edit className="h-4 w-4" />
                           <span className="sr-only">Edit User</span>
                         </Button>
@@ -213,17 +271,18 @@ export default function UsersPage() {
                             size="icon" 
                             onClick={() => handleToggleActive(user.id)}
                             title={user.isActive ? 'Deactivate User' : 'Activate User'}
+                            disabled={userMutation.isPending || deleteUserMutation.isPending || updateUserPinMutation.isPending || updateUserStatusMutation.isPending}
                         >
                           {user.isActive ? <ToggleLeft className="h-4 w-4" /> : <ToggleRight className="h-4 w-4" />}
                           <span className="sr-only">{user.isActive ? 'Deactivate' : 'Activate'} User</span>
                         </Button>
-                         <Button variant="outline" size="icon" onClick={() => handleChangePin(user.id)} title="Change PIN">
+                         <Button variant="outline" size="icon" onClick={() => handleChangePin(user.id)} title="Change PIN" disabled={userMutation.isPending || deleteUserMutation.isPending || updateUserPinMutation.isPending || updateUserStatusMutation.isPending}>
                             <KeyRound className="h-4 w-4" />
                             <span className="sr-only">Change PIN</span>
                         </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="destructive" size="icon" title="Delete User">
+                            <Button variant="destructive" size="icon" title="Delete User" disabled={userMutation.isPending || deleteUserMutation.isPending || updateUserPinMutation.isPending || updateUserStatusMutation.isPending}>
                               <Trash2 className="h-4 w-4" />
                               <span className="sr-only">Delete User</span>
                             </Button>
@@ -259,10 +318,10 @@ export default function UsersPage() {
         </CardHeader>
         <CardContent>
             <p className="text-muted-foreground">
-            User data is now stored in your browser's local storage. Roles (Admin, Manager, Cashier, Staff) are informational and do not restrict access to features in this version.
+            User data is stored in your Firebase Firestore database. Roles (Front Staff, Manager, Owner, Administrator) are informational and do not restrict access to features in this version.
             </p>
              <p className="text-muted-foreground mt-2">
-            PINs are stored locally. There is no central authentication server.
+            PINs are stored in Firestore.
             </p>
         </CardContent>
        </Card>

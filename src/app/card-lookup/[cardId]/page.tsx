@@ -12,11 +12,14 @@ import { AlertTriangle, Info, Loader2, History, UserCircle, Wallet } from 'lucid
 import { format } from 'date-fns';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { db } from '@/lib/firebase';
+import { doc, getDoc, collection, query as firestoreQuery, where, orderBy, limit, getDocs } from 'firebase/firestore';
 
-const TOPUP_CARDS_STORAGE_KEY = 'topUpCardsData';
-const CARD_TRANSACTIONS_STORAGE_KEY = 'cardTransactionsData';
-const CUSTOMERS_STORAGE_KEY = 'customers';
-const APP_SETTINGS_KEY = 'appSettings';
+const TOPUP_CARDS_COLLECTION = 'topUpCards';
+const CARD_TRANSACTIONS_COLLECTION = 'cardTransactions';
+const CUSTOMERS_COLLECTION = 'customers';
+const APP_SETTINGS_DOC_ID = 'current';
+
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 const formatDate = (isoString: string) => format(new Date(isoString), 'MMM dd, yyyy HH:mm');
@@ -30,79 +33,97 @@ export default function CardLookupPage() {
   const [customerName, setCustomerName] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
   const [appTitle, setAppTitle] = useState(DEFAULT_APP_TITLE);
 
   useEffect(() => {
-    setIsMounted(true);
-    const storedSettings = localStorage.getItem(APP_SETTINGS_KEY);
-    if (storedSettings) {
-      try {
-        const parsedSettings: AppSettings = JSON.parse(storedSettings);
-        if (parsedSettings.storeName) {
-          setAppTitle(parsedSettings.storeName);
-          document.title = `Card Lookup - ${parsedSettings.storeName}`;
-        } else {
-           document.title = `Card Lookup - ${DEFAULT_APP_TITLE}`;
+    const fetchAppSettings = async () => {
+      if (db) {
+        try {
+          const settingsDocRef = doc(db, 'appSettings', APP_SETTINGS_DOC_ID);
+          const docSnap = await getDoc(settingsDocRef);
+          if (docSnap.exists()) {
+            const parsedSettings = docSnap.data() as AppSettings;
+            if (parsedSettings.storeName) {
+              setAppTitle(parsedSettings.storeName);
+              document.title = `Card Lookup - ${parsedSettings.storeName}`;
+            } else {
+              document.title = `Card Lookup - ${DEFAULT_APP_TITLE}`;
+            }
+          } else {
+            document.title = `Card Lookup - ${DEFAULT_APP_TITLE}`;
+          }
+        } catch (e) { 
+          document.title = `Card Lookup - ${DEFAULT_APP_TITLE}`;
         }
-      } catch (e) { 
-        document.title = `Card Lookup - ${DEFAULT_APP_TITLE}`;
+      } else {
+         document.title = `Card Lookup - ${DEFAULT_APP_TITLE}`;
       }
-    } else {
-      document.title = `Card Lookup - ${DEFAULT_APP_TITLE}`;
-    }
+    };
+    fetchAppSettings();
   }, []);
 
   useEffect(() => {
-    if (!isMounted || !cardIdParam) {
-      if (isMounted && !cardIdParam) {
-          setError("Card ID is missing from the URL.");
-          setIsLoading(false);
-      }
+    if (!cardIdParam) {
+      setError("Card ID is missing from the URL.");
+      setIsLoading(false);
       return;
     }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const storedCards = localStorage.getItem(TOPUP_CARDS_STORAGE_KEY);
-      const allCards: TopUpCard[] = storedCards ? JSON.parse(storedCards) : [];
-      const foundCard = allCards.find(c => c.cardId.toUpperCase() === cardIdParam.toUpperCase());
-
-      if (foundCard) {
-        setCard(foundCard);
-
-        const storedTransactions = localStorage.getItem(CARD_TRANSACTIONS_STORAGE_KEY);
-        const allTransactions: CardTransaction[] = storedTransactions ? JSON.parse(storedTransactions) : [];
-        const cardTransactions = allTransactions
-          .filter(tx => tx.cardId.toUpperCase() === foundCard.cardId.toUpperCase())
-          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-          .slice(0, 10);
-        setTransactions(cardTransactions);
-
-        if (foundCard.customerId) {
-          const storedCustomers = localStorage.getItem(CUSTOMERS_STORAGE_KEY);
-          const allCustomers: Customer[] = storedCustomers ? JSON.parse(storedCustomers) : [];
-          const foundCustomer = allCustomers.find(cust => cust.id === foundCard.customerId);
-          setCustomerName(foundCustomer ? foundCustomer.name : 'N/A');
-        } else {
-          setCustomerName(null);
-        }
-      } else {
-        setError(`Top-Up Card with ID "${cardIdParam}" not found.`);
-        setCard(null);
-      }
-    } catch (e: any) {
-      console.error("Error loading card data:", e);
-      setError(`Failed to load card information. ${e.message}`);
-      setCard(null);
-    } finally {
-      setIsLoading(false);
+    if (!db) {
+        setError("Database connection not available. Cannot fetch card details.");
+        setIsLoading(false);
+        return;
     }
-  }, [cardIdParam, isMounted]);
 
-  if (!isMounted || isLoading) {
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        // Fetch card by cardId field, not document ID
+        const cardsQuery = firestoreQuery(collection(db, TOPUP_CARDS_COLLECTION), where("cardId", "==", cardIdParam.toUpperCase()));
+        const cardSnapshot = await getDocs(cardsQuery);
+
+        if (!cardSnapshot.empty) {
+          const foundCardDoc = cardSnapshot.docs[0];
+          const foundCard = { id: foundCardDoc.id, ...foundCardDoc.data() } as TopUpCard;
+          setCard(foundCard);
+
+          const transactionsQuery = firestoreQuery(
+            collection(db, CARD_TRANSACTIONS_COLLECTION),
+            where("cardId", "==", foundCard.cardId.toUpperCase()),
+            orderBy("timestamp", "desc"),
+            limit(10)
+          );
+          const transactionsSnapshot = await getDocs(transactionsQuery);
+          setTransactions(transactionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CardTransaction)));
+
+          if (foundCard.customerId) {
+            const customerDocRef = doc(db, CUSTOMERS_COLLECTION, foundCard.customerId);
+            const customerSnap = await getDoc(customerDocRef);
+            if (customerSnap.exists()) {
+              setCustomerName((customerSnap.data() as Customer).name);
+            } else {
+              setCustomerName('N/A');
+            }
+          } else {
+            setCustomerName(null);
+          }
+        } else {
+          setError(`Top-Up Card with ID "${cardIdParam}" not found.`);
+          setCard(null);
+        }
+      } catch (e: any) {
+        console.error("Error loading card data from Firestore:", e);
+        setError(`Failed to load card information. ${e.message}`);
+        setCard(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, [cardIdParam]);
+
+  if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[calc(100vh-150px)] text-center">
         <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
@@ -130,6 +151,8 @@ export default function CardLookupPage() {
   }
 
   if (!card) {
+    // This state is now covered by the error "Card...not found"
+    // But keep a fallback just in case.
     return (
       <Card className="shadow-lg">
         <CardHeader>

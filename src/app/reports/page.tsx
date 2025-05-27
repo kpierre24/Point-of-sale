@@ -2,16 +2,23 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import type { SoldProduct, User } from '@/types';
+import type { SoldProduct, User as AppUser } from '@/types'; // Renamed User to AppUser
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, BarChartBig, UserSquare, CalendarDays } from "lucide-react";
-import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, isWithinInterval, getWeek, getMonth, getYear } from 'date-fns';
-import { Label } from "@/components/ui/label"; // Added import for Label
+import { FileText, BarChartBig, UserSquare, CalendarDays, Loader2 } from "lucide-react";
+import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, getWeek, getYear } from 'date-fns';
+import { Label } from "@/components/ui/label";
+import { db } from '@/lib/firebase';
+import { collection, getDocs, query as firestoreQuery, where, orderBy } from 'firebase/firestore';
+import { useQuery } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
+
+const SALES_COLLECTION = 'sales';
+const USERS_COLLECTION = 'users'; // Assuming staff users are stored here
 
 type ReportType = 'staff' | 'daily' | 'weekly' | 'monthly' | '';
 interface ReportDataItem {
@@ -22,150 +29,204 @@ const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 };
 
-export default function ReportsPage() {
-  const [allSales, setAllSales] = useState<SoldProduct[]>([]);
-  const [allStaff, setAllStaff] = useState<User[]>([]);
-  const [isMounted, setIsMounted] = useState(false);
+// Fetcher functions
+const fetchAllSalesForReport = async (startDate?: Date, endDate?: Date): Promise<SoldProduct[]> => {
+  if (!db) throw new Error("Firestore not available");
+  const salesCol = collection(db, SALES_COLLECTION);
+  let q = firestoreQuery(salesCol, orderBy("timestamp", "desc"));
 
+  // Firestore where clauses for date range filtering
+  // Note: Firestore requires ISO string format for timestamp comparisons if stored as strings.
+  // If timestamps are Firestore Timestamp objects, direct comparison is possible.
+  // Assuming timestamps are ISO strings for this example.
+  if (startDate) {
+    q = firestoreQuery(q, where("timestamp", ">=", startDate.toISOString()));
+  }
+  if (endDate) {
+     const endOfDayEndDate = new Date(endDate);
+     endOfDayEndDate.setHours(23,59,59,999);
+    q = firestoreQuery(q, where("timestamp", "<=", endOfDayEndDate.toISOString()));
+  }
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SoldProduct));
+};
+
+const fetchAllStaff = async (): Promise<AppUser[]> => {
+  if (!db) throw new Error("Firestore not available");
+  const staffCol = collection(db, USERS_COLLECTION);
+  const snapshot = await getDocs(staffCol);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppUser));
+};
+
+
+export default function ReportsPage() {
+  const { toast } = useToast();
   const [reportType, setReportType] = useState<ReportType>('');
   const [selectedStaffId, setSelectedStaffId] = useState<string>('all');
   const [startDate, setStartDate] = useState<Date | undefined>(startOfMonth(new Date()));
   const [endDate, setEndDate] = useState<Date | undefined>(endOfMonth(new Date()));
   const [generatedReportData, setGeneratedReportData] = useState<ReportDataItem[]>([]);
   const [reportTitle, setReportTitle] = useState<string>('');
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
-  useEffect(() => {
-    setIsMounted(true);
-    const storedSales = localStorage.getItem('soldItems');
-    if (storedSales) {
-      try {
-        setAllSales(JSON.parse(storedSales));
-      } catch (e) {
-        console.error("Failed to parse sales from localStorage", e);
-        setAllSales([]);
-      }
-    }
-    const storedStaff = localStorage.getItem('staffUsers');
-    if (storedStaff) {
-      try {
-        setAllStaff(JSON.parse(storedStaff));
-      } catch (e) {
-        console.error("Failed to parse staff from localStorage", e);
-        setAllStaff([]);
-      }
-    }
-  }, []);
+  const { data: allStaff = [], isLoading: isLoadingStaff, isError: isStaffError, error: staffError } = useQuery<AppUser[], Error>({
+    queryKey: [USERS_COLLECTION],
+    queryFn: fetchAllStaff,
+    enabled: !!db,
+  });
   
+  // Sales data will be fetched on demand when generating report
+  // const { data: allSales = [], isLoading: isLoadingSales, isError: isSalesError, error: salesError } = useQuery<SoldProduct[], Error>({
+  //   queryKey: [SALES_COLLECTION], // Could add date range to key if we pre-fetch filtered sales
+  //   queryFn: () => fetchAllSalesForReport(startDate, endDate),
+  //   enabled: !!db && !!reportType && (reportType !== 'staff'), // Example of conditional fetching
+  // });
+  
+   useEffect(() => {
+    if (isStaffError) toast({ title: 'Error Loading Staff', description: staffError?.message, variant: 'destructive' });
+    // if (isSalesError) toast({ title: 'Error Loading Sales Data', description: salesError?.message, variant: 'destructive' });
+  }, [isStaffError, staffError, toast]);
+
+
   const getStaffName = (staffId?: string): string => {
     if (!staffId) return 'N/A';
     const staffMember = allStaff.find(s => s.id === staffId);
     return staffMember ? staffMember.name : 'Unknown Staff';
   };
 
-  const handleGenerateReport = () => {
+  const handleGenerateReport = async () => {
     if (!reportType) {
       setGeneratedReportData([]);
       setReportTitle('');
       return;
     }
-
-    let filteredSales = allSales;
-    if (startDate && endDate && (reportType === 'daily' || reportType === 'weekly' || reportType === 'monthly')) {
-      const rangeEnd = new Date(endDate);
-      rangeEnd.setHours(23, 59, 59, 999); // Ensure end of day for endDate
-      filteredSales = allSales.filter(sale => 
-        isWithinInterval(parseISO(sale.timestamp), { start: startDate, end: rangeEnd })
-      );
+    if (!db) {
+        toast({title: "Firestore Not Available", description: "Cannot generate report.", variant: "destructive"});
+        return;
     }
-    
-    let data: ReportDataItem[] = [];
-    let title = '';
 
-    switch (reportType) {
-      case 'staff':
-        title = `Sales by Staff Member${selectedStaffId !== 'all' ? ` (${getStaffName(selectedStaffId)})` : ''}`;
-        const staffSales: { [key: string]: { totalAmount: number; salesCount: number; items: SoldProduct[] } } = {};
+    setIsGeneratingReport(true);
+    setGeneratedReportData([]);
+    setReportTitle('Generating report...');
+
+    try {
+        const fetchedSales = await fetchAllSalesForReport(startDate, endDate);
+        let data: ReportDataItem[] = [];
+        let title = '';
+
+        // Ensure date range filtering for all relevant report types if not already handled by fetchAllSalesForReport
+        // For simplicity, fetchAllSalesForReport now handles date range
+        let filteredSales = fetchedSales; 
+        // if (startDate && endDate && (reportType === 'daily' || reportType === 'weekly' || reportType === 'monthly')) {
+        //   const rangeEnd = new Date(endDate);
+        //   rangeEnd.setHours(23, 59, 59, 999);
+        //   filteredSales = fetchedSales.filter(sale => 
+        //     isWithinInterval(parseISO(sale.timestamp), { start: startDate, end: rangeEnd })
+        //   );
+        // } else {
+        //     filteredSales = fetchedSales;
+        // }
+
+
+      switch (reportType) {
+        case 'staff':
+          title = `Sales by Staff Member${selectedStaffId !== 'all' ? ` (${getStaffName(selectedStaffId)})` : ''}`;
+          const staffSales: { [key: string]: { totalAmount: number; salesCount: number; items: SoldProduct[] } } = {};
+          
+          (selectedStaffId === 'all' ? filteredSales : filteredSales.filter(s => s.staffId === selectedStaffId)).forEach(sale => {
+            const staffIdKey = sale.staffId || 'unknown'; // Ensure staffId is always a string key
+            if (!staffSales[staffIdKey]) {
+              staffSales[staffIdKey] = { totalAmount: 0, salesCount: 0, items: [] };
+            }
+            staffSales[staffIdKey].totalAmount += sale.total;
+            staffSales[staffIdKey].salesCount += 1;
+            staffSales[staffIdKey].items.push(sale);
+          });
+          
+          data = Object.entries(staffSales).map(([staffIdVal, aggregates]) => ({
+            staffName: getStaffName(staffIdVal),
+            totalSalesAmount: aggregates.totalAmount,
+            numberOfSales: aggregates.salesCount,
+            averageSaleValue: aggregates.salesCount > 0 ? aggregates.totalAmount / aggregates.salesCount : 0,
+          })).sort((a,b) => b.totalSalesAmount - a.totalSalesAmount);
+          break;
         
-        (selectedStaffId === 'all' ? filteredSales : filteredSales.filter(s => s.staffId === selectedStaffId)).forEach(sale => {
-          const staffId = sale.staffId || 'unknown';
-          if (!staffSales[staffId]) {
-            staffSales[staffId] = { totalAmount: 0, salesCount: 0, items: [] };
-          }
-          staffSales[staffId].totalAmount += sale.total;
-          staffSales[staffId].salesCount += 1;
-          staffSales[staffId].items.push(sale);
-        });
-        
-        data = Object.entries(staffSales).map(([staffId, aggregates]) => ({
-          staffName: getStaffName(staffId),
-          totalSalesAmount: aggregates.totalAmount,
-          numberOfSales: aggregates.salesCount,
-          averageSaleValue: aggregates.salesCount > 0 ? aggregates.totalAmount / aggregates.salesCount : 0,
-          // topProduct: aggregates.items.sort((a,b) => b.quantity - a.quantity)[0]?.name || 'N/A' // Example advanced metric
-        })).sort((a,b) => b.totalSalesAmount - a.totalSalesAmount);
-        break;
-      
-      case 'daily':
-        title = `Daily Sales Summary (${format(startDate || new Date(), 'MMM dd, yyyy')} - ${format(endDate || new Date(), 'MMM dd, yyyy')})`;
-        const dailySales: { [key: string]: { totalAmount: number; salesCount: number } } = {};
-        filteredSales.forEach(sale => {
-          const day = format(parseISO(sale.timestamp), 'yyyy-MM-dd');
-          if (!dailySales[day]) {
-            dailySales[day] = { totalAmount: 0, salesCount: 0 };
-          }
-          dailySales[day].totalAmount += sale.total;
-          dailySales[day].salesCount += 1;
-        });
-        data = Object.entries(dailySales).map(([date, aggregates]) => ({
-          date: format(parseISO(date), 'MMM dd, yyyy (EEE)'),
-          totalSalesAmount: aggregates.totalAmount,
-          numberOfSales: aggregates.salesCount,
-        })).sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-        break;
+        case 'daily':
+          title = `Daily Sales Summary (${format(startDate || new Date(), 'MMM dd, yyyy')} - ${format(endDate || new Date(), 'MMM dd, yyyy')})`;
+          const dailySales: { [key: string]: { totalAmount: number; salesCount: number } } = {};
+          filteredSales.forEach(sale => {
+            const day = format(parseISO(sale.timestamp), 'yyyy-MM-dd');
+            if (!dailySales[day]) {
+              dailySales[day] = { totalAmount: 0, salesCount: 0 };
+            }
+            dailySales[day].totalAmount += sale.total;
+            dailySales[day].salesCount += 1;
+          });
+          data = Object.entries(dailySales).map(([date, aggregates]) => ({
+            date: format(parseISO(date), 'MMM dd, yyyy (EEE)'),
+            totalSalesAmount: aggregates.totalAmount,
+            numberOfSales: aggregates.salesCount,
+          })).sort((a,b) => new Date(parseISO(a.date)).getTime() - new Date(parseISO(b.date)).getTime());
+          break;
 
-      case 'weekly':
-        title = `Weekly Sales Summary (${format(startDate || new Date(), 'MMM dd')} - ${format(endDate || new Date(), 'MMM dd, yyyy')})`;
-        const weeklySales: { [key: string]: { totalAmount: number; salesCount: number } } = {};
-        filteredSales.forEach(sale => {
-          const saleDate = parseISO(sale.timestamp);
-          const weekKey = `${getYear(saleDate)}-W${getWeek(saleDate, { weekStartsOn: 1 })}`; // ISO week
-          if (!weeklySales[weekKey]) {
-            weeklySales[weekKey] = { totalAmount: 0, salesCount: 0 };
-          }
-          weeklySales[weekKey].totalAmount += sale.total;
-          weeklySales[weekKey].salesCount += 1;
-        });
-        data = Object.entries(weeklySales).map(([week, aggregates]) => ({
-          week: week, // e.g. "2023-W42"
-          totalSalesAmount: aggregates.totalAmount,
-          numberOfSales: aggregates.salesCount,
-        })).sort((a,b) => a.week.localeCompare(b.week));
-        break;
+        case 'weekly':
+          title = `Weekly Sales Summary (${format(startDate || new Date(), 'MMM dd')} - ${format(endDate || new Date(), 'MMM dd, yyyy')})`;
+          const weeklySales: { [key: string]: { totalAmount: number; salesCount: number } } = {};
+          filteredSales.forEach(sale => {
+            const saleDate = parseISO(sale.timestamp);
+            const weekKey = `${getYear(saleDate)}-W${getWeek(saleDate, { weekStartsOn: 1 })}`;
+            if (!weeklySales[weekKey]) {
+              weeklySales[weekKey] = { totalAmount: 0, salesCount: 0 };
+            }
+            weeklySales[weekKey].totalAmount += sale.total;
+            weeklySales[weekKey].salesCount += 1;
+          });
+          data = Object.entries(weeklySales).map(([week, aggregates]) => ({
+            week: week,
+            totalSalesAmount: aggregates.totalAmount,
+            numberOfSales: aggregates.salesCount,
+          })).sort((a,b) => a.week.localeCompare(b.week));
+          break;
 
-      case 'monthly':
-        title = `Monthly Sales Summary (${format(startDate || new Date(), 'MMM yyyy')} - ${format(endDate || new Date(), 'MMM yyyy')})`;
-        const monthlySales: { [key: string]: { totalAmount: number; salesCount: number } } = {};
-        filteredSales.forEach(sale => {
-          const monthKey = format(parseISO(sale.timestamp), 'yyyy-MM');
-          if (!monthlySales[monthKey]) {
-            monthlySales[monthKey] = { totalAmount: 0, salesCount: 0 };
-          }
-          monthlySales[monthKey].totalAmount += sale.total;
-          monthlySales[monthKey].salesCount += 1;
-        });
-        data = Object.entries(monthlySales).map(([month, aggregates]) => ({
-          month: format(parseISO(month + '-01'), 'MMMM yyyy'), // Format for display
-          totalSalesAmount: aggregates.totalAmount,
-          numberOfSales: aggregates.salesCount,
-        })).sort((a,b) => a.month.localeCompare(b.month)); // This might need date-based sort if format changes
-        break;
+        case 'monthly':
+          title = `Monthly Sales Summary (${format(startDate || new Date(), 'MMM yyyy')} - ${format(endDate || new Date(), 'MMM yyyy')})`;
+          const monthlySales: { [key: string]: { totalAmount: number; salesCount: number } } = {};
+          filteredSales.forEach(sale => {
+            const monthKey = format(parseISO(sale.timestamp), 'yyyy-MM');
+            if (!monthlySales[monthKey]) {
+              monthlySales[monthKey] = { totalAmount: 0, salesCount: 0 };
+            }
+            monthlySales[monthKey].totalAmount += sale.total;
+            monthlySales[monthKey].salesCount += 1;
+          });
+          data = Object.entries(monthlySales).map(([month, aggregates]) => ({
+            month: format(parseISO(month + '-01'), 'MMMM yyyy'),
+            totalSalesAmount: aggregates.totalAmount,
+            numberOfSales: aggregates.salesCount,
+          })).sort((a, b) => new Date(parseISO(a.month)).getTime() - new Date(parseISO(b.month)).getTime());
+          break;
+        }
+        setGeneratedReportData(data);
+        setReportTitle(title);
+    } catch (err: any) {
+        toast({title: "Error Generating Report", description: err.message, variant: "destructive"});
+        setReportTitle('Error generating report.');
+    } finally {
+        setIsGeneratingReport(false);
     }
-    setGeneratedReportData(data);
-    setReportTitle(title);
   };
   
   const renderReportTable = () => {
-    if (generatedReportData.length === 0 && reportTitle) return <p className="text-muted-foreground">No data available for this report.</p>;
+    if (isGeneratingReport) {
+        return (
+            <div className="flex items-center justify-center h-32">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="ml-2">Generating report...</p>
+            </div>
+        );
+    }
+    if (generatedReportData.length === 0 && reportTitle && reportTitle !== 'Generating report...') return <p className="text-muted-foreground">No data available for this report.</p>;
     if (generatedReportData.length === 0) return null;
 
     const headers: { key: string, label: string, type?: 'currency' | 'number' | 'string' }[] = [];
@@ -217,9 +278,26 @@ export default function ReportsPage() {
     );
   };
 
-  if (!isMounted) {
-    return <div className="flex justify-center items-center h-screen"><FileText className="h-8 w-8 animate-pulse" /> <span className="ml-2">Loading reports...</span></div>;
+  if (!db) {
+    return (
+      <div className="space-y-8">
+        <Card className="border-destructive">
+          <CardHeader><CardTitle className="text-destructive">Firebase Not Connected</CardTitle></CardHeader>
+          <CardContent><p>Cannot load reports. Please check Firebase configuration.</p></CardContent>
+        </Card>
+      </div>
+    );
   }
+  
+  if (isLoadingStaff) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-4 text-lg">Loading report dependencies...</p>
+      </div>
+    );
+  }
+
 
   return (
     <div className="space-y-8">
@@ -229,7 +307,7 @@ export default function ReportsPage() {
           Sales Reports
         </h1>
         <p className="text-muted-foreground text-md">
-          Generate and view sales reports by staff, or daily, weekly, and monthly summaries.
+          Generate and view sales reports by staff, or daily, weekly, and monthly summaries from Firestore.
         </p>
       </header>
 
@@ -272,7 +350,7 @@ export default function ReportsPage() {
               </div>
             )}
 
-            {(reportType === 'daily' || reportType === 'weekly' || reportType === 'monthly') && (
+            {(reportType === 'daily' || reportType === 'weekly' || reportType === 'monthly' || reportType === 'staff') && ( // Staff report also uses date range
               <>
                 <div>
                   <Label htmlFor="startDate">Start Date</Label>
@@ -285,7 +363,10 @@ export default function ReportsPage() {
               </>
             )}
           </div>
-          <Button onClick={handleGenerateReport} disabled={!reportType}>Generate Report</Button>
+          <Button onClick={handleGenerateReport} disabled={!reportType || isGeneratingReport}>
+            {isGeneratingReport ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Generate Report
+          </Button>
         </CardContent>
       </Card>
 
@@ -294,9 +375,9 @@ export default function ReportsPage() {
           <CardHeader>
             <CardTitle>{reportTitle}</CardTitle>
             <CardDescription>
-              { generatedReportData.length > 0 
+              { !isGeneratingReport && generatedReportData.length > 0 
                 ? `Displaying ${generatedReportData.length} record(s).`
-                : 'No data found for the selected criteria.'
+                : !isGeneratingReport ? 'No data found for the selected criteria.' : ''
               }
             </CardDescription>
           </CardHeader>
@@ -319,4 +400,3 @@ export default function ReportsPage() {
     </div>
   );
 }
-

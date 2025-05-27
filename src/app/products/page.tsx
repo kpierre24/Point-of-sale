@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import type { Product, BuiltProductRecipe } from '@/types'; // Added BuiltProductRecipe
+import type { Product, BuiltProductRecipe } from '@/types';
 import { Button } from '@/components/ui/button';
 import { ProductForm } from '@/components/ProductForm';
 import {
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { PlusCircle, Edit, Trash2, Image as ImageIcon, Download } from 'lucide-react'; // Added Download
+import { PlusCircle, Edit, Trash2, Image as ImageIcon, Download, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
 import {
@@ -29,7 +29,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+} from "@/components/ui/alert-dialog";
+import { db } from '@/lib/firebase';
+import { collection, getDocs, doc, setDoc, deleteDoc, orderBy, query as firestoreQuery } from 'firebase/firestore';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+const PRODUCTS_COLLECTION = 'products';
+const RECIPES_COLLECTION = 'recipes';
 
 const escapeCsvField = (field: any): string => {
   if (field === null || field === undefined) {
@@ -42,56 +48,86 @@ const escapeCsvField = (field: any): string => {
   return stringField;
 };
 
+// Fetcher functions for React Query
+const fetchProducts = async (): Promise<Product[]> => {
+  if (!db) throw new Error("Firestore not available");
+  const productsCol = collection(db, PRODUCTS_COLLECTION);
+  // Example: Order by name, adjust if you have a 'createdAt' or similar field for sorting by addition time
+  const q = firestoreQuery(productsCol, orderBy("name")); 
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+};
+
+const fetchRecipes = async (): Promise<BuiltProductRecipe[]> => {
+    if (!db) throw new Error("Firestore not available");
+    const recipesCol = collection(db, RECIPES_COLLECTION);
+    const q = firestoreQuery(recipesCol, orderBy("name"));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BuiltProductRecipe));
+};
+
 export default function ProductsPage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [availableRecipes, setAvailableRecipes] = useState<BuiltProductRecipe[]>([]); // For ProductForm
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    setIsMounted(true);
-    const storedProducts = localStorage.getItem('products');
-    if (storedProducts) {
-      try {
-        setProducts(JSON.parse(storedProducts));
-      } catch (e) {
-        console.error("Failed to parse products from localStorage", e);
-        setProducts([]);
-      }
-    }
-    const storedRecipes = localStorage.getItem('builtProductRecipes');
-    if (storedRecipes) {
-        try {
-            setAvailableRecipes(JSON.parse(storedRecipes));
-        } catch (e) {
-            console.error("Failed to parse recipes from localStorage", e);
-            setAvailableRecipes([]);
-        }
-    }
-  }, []);
+  const { data: products = [], isLoading: isLoadingProducts, isError: isProductsError, error: productsError } = useQuery<Product[], Error>({
+    queryKey: [PRODUCTS_COLLECTION],
+    queryFn: fetchProducts,
+    enabled: !!db,
+  });
 
+  const { data: availableRecipes = [], isLoading: isLoadingRecipes, isError: isRecipesError, error: recipesError } = useQuery<BuiltProductRecipe[], Error>({
+    queryKey: [RECIPES_COLLECTION],
+    queryFn: fetchRecipes,
+    enabled: !!db,
+  });
+  
   useEffect(() => {
-    if (isMounted) {
-      localStorage.setItem('products', JSON.stringify(products));
+    if (isProductsError) {
+      toast({ title: 'Error Loading Products', description: productsError?.message || 'Could not fetch products.', variant: 'destructive' });
     }
-  }, [products, isMounted]);
+    if (isRecipesError) {
+      toast({ title: 'Error Loading Recipes', description: recipesError?.message || 'Could not fetch recipes.', variant: 'destructive' });
+    }
+  }, [isProductsError, productsError, isRecipesError, recipesError, toast]);
+
+
+  const productMutation = useMutation<void, Error, { product: Product; isEditing: boolean }>({
+    mutationFn: async ({ product, isEditing }) => {
+      if (!db) throw new Error("Firestore not available");
+      const productRef = doc(db, PRODUCTS_COLLECTION, product.id);
+      await setDoc(productRef, product, { merge: isEditing }); // merge true for updates, false for new (though setDoc creates if not exists)
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [PRODUCTS_COLLECTION] });
+      toast({ title: variables.isEditing ? 'Product Updated' : 'Product Added', description: `${variables.product.name} has been saved.` });
+      setIsFormOpen(false);
+      setProductToEdit(null);
+    },
+    onError: (error) => {
+      toast({ title: 'Error Saving Product', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const deleteProductMutation = useMutation<void, Error, string>({
+    mutationFn: async (productId: string) => {
+      if (!db) throw new Error("Firestore not available");
+      const productRef = doc(db, PRODUCTS_COLLECTION, productId);
+      await deleteDoc(productRef);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [PRODUCTS_COLLECTION] });
+      toast({ title: 'Product Deleted', description: 'The product has been removed.', variant: 'destructive' });
+    },
+    onError: (error) => {
+      toast({ title: 'Error Deleting Product', description: error.message, variant: 'destructive' });
+    },
+  });
 
   const handleSaveProduct = (product: Product) => {
-    setProducts((prevProducts) => {
-      const existingIndex = prevProducts.findIndex((p) => p.id === product.id);
-      if (existingIndex > -1) {
-        const updatedProducts = [...prevProducts];
-        updatedProducts[existingIndex] = product;
-        toast({ title: 'Product Updated', description: `${product.name} has been updated.` });
-        return updatedProducts;
-      } else {
-        toast({ title: 'Product Added', description: `${product.name} has been added to your inventory.` });
-        return [product, ...prevProducts];
-      }
-    });
-    setProductToEdit(null); 
+    productMutation.mutate({ product, isEditing: !!productToEdit });
   };
 
   const handleAddNewProduct = () => {
@@ -105,8 +141,7 @@ export default function ProductsPage() {
   };
 
   const handleDeleteProduct = (productId: string) => {
-    setProducts((prevProducts) => prevProducts.filter((p) => p.id !== productId));
-    toast({ title: 'Product Deleted', description: 'The product has been removed from your inventory.', variant: 'destructive' });
+    deleteProductMutation.mutate(productId);
   };
   
   const formatCurrency = (amount: number | undefined) => {
@@ -119,24 +154,15 @@ export default function ProductsPage() {
       toast({ title: "No Data", description: "There are no products to export.", variant: "destructive" });
       return;
     }
-
     const headers = ["ID", "Name", "Description", "Price", "Cost of Goods Sold", "Stock Quantity", "Category", "Image URL", "Recipe ID"];
-    
     const csvRows = [
       headers.join(','),
       ...products.map(product => [
-        escapeCsvField(product.id),
-        escapeCsvField(product.name),
-        escapeCsvField(product.description),
-        escapeCsvField(product.price),
-        escapeCsvField(product.costOfGoodsSold),
-        escapeCsvField(product.stockQuantity),
-        escapeCsvField(product.category),
-        escapeCsvField(product.imageUrl),
-        escapeCsvField(product.recipeId),
+        escapeCsvField(product.id), escapeCsvField(product.name), escapeCsvField(product.description),
+        escapeCsvField(product.price), escapeCsvField(product.costOfGoodsSold), escapeCsvField(product.stockQuantity),
+        escapeCsvField(product.category), escapeCsvField(product.imageUrl), escapeCsvField(product.recipeId),
       ].join(','))
     ];
-    
     const csvString = csvRows.join('\n');
     const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
@@ -151,21 +177,42 @@ export default function ProductsPage() {
     toast({ title: "Export Successful", description: "Product data exported to CSV." });
   };
 
+  if (!db) {
+    return (
+      <div className="space-y-8">
+        <Card className="border-destructive">
+          <CardHeader><CardTitle className="text-destructive">Firebase Not Connected</CardTitle></CardHeader>
+          <CardContent><p>Cannot load products. Please check Firebase configuration.</p></CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+
+  if (isLoadingProducts || isLoadingRecipes) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-4 text-lg">Loading product data...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <header className="flex items-center justify-between mb-8">
         <div>
             <h1 className="text-3xl font-bold tracking-tight">Product Management</h1>
             <p className="text-muted-foreground text-md">
-            Add, view, edit, and manage your product inventory.
+            Add, view, edit, and manage your product inventory using Firestore.
             </p>
         </div>
         <div className="flex items-center space-x-2">
-          <Button onClick={handleExportProducts} variant="outline">
+          <Button onClick={handleExportProducts} variant="outline" disabled={products.length === 0}>
             <Download className="mr-2 h-4 w-4" />
             Export Products
           </Button>
-          <Button onClick={handleAddNewProduct}>
+          <Button onClick={handleAddNewProduct} disabled={productMutation.isPending}>
             <PlusCircle className="mr-2 h-4 w-4" />
             Add Product
           </Button>
@@ -177,7 +224,7 @@ export default function ProductsPage() {
         onOpenChange={setIsFormOpen}
         onSave={handleSaveProduct}
         productToEdit={productToEdit}
-        availableRecipes={availableRecipes} 
+        availableRecipes={availableRecipes || []}
       />
 
       <Card>
@@ -228,13 +275,13 @@ export default function ProductsPage() {
                     <TableCell className="text-right">{product.stockQuantity}</TableCell>
                     <TableCell className="text-center">
                       <div className="flex justify-center items-center space-x-2">
-                        <Button variant="outline" size="icon" onClick={() => handleEditProduct(product)}>
+                        <Button variant="outline" size="icon" onClick={() => handleEditProduct(product)} disabled={productMutation.isPending || deleteProductMutation.isPending}>
                           <Edit className="h-4 w-4" />
                           <span className="sr-only">Edit</span>
                         </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="destructive" size="icon">
+                            <Button variant="destructive" size="icon" disabled={productMutation.isPending || deleteProductMutation.isPending}>
                               <Trash2 className="h-4 w-4" />
                               <span className="sr-only">Delete</span>
                             </Button>

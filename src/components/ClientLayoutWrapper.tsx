@@ -2,9 +2,10 @@
 "use client";
 
 import type React from 'react';
-import { useState, useEffect } from 'react'; // Added useState, useEffect
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'; // Added
 import {
   SidebarProvider,
   Sidebar,
@@ -17,20 +18,24 @@ import {
   SidebarInset,
   SidebarFooter,
 } from '@/components/ui/sidebar';
-import { APP_TITLE as DEFAULT_APP_TITLE } from '@/config/constants'; // Renamed for clarity
+import { APP_TITLE as DEFAULT_APP_TITLE } from '@/config/constants';
 import type { AppSettings } from '@/types';
+import { db } from '@/lib/firebase'; // Added
+import { doc, getDoc } from 'firebase/firestore'; // Added
+import { useToast } from '@/hooks/use-toast'; // Added
 import {
   LayoutDashboard,
   ShoppingCart,
   Package,
-  ClipboardList, 
+  ClipboardList,
   Truck,
   Users,
   UserCog,
-  Settings as SettingsIcon, 
+  Settings as SettingsIcon,
   Home,
   FileText,
   CreditCard,
+  Loader2, // Added
 } from 'lucide-react';
 
 interface NavItem {
@@ -56,123 +61,150 @@ const settingsNavItems: NavItem[] = [
  { href: '/settings', icon: SettingsIcon, label: 'Settings', tooltip: 'Application Settings' },
 ];
 
-const APP_SETTINGS_KEY = 'appSettings';
+const APP_SETTINGS_DOC_ID = 'current'; // Document ID for app settings in Firestore
+const queryClient = new QueryClient(); // Create a client
 
 export function ClientLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [appTitle, setAppTitle] = useState(DEFAULT_APP_TITLE);
+  const [isSettingsLoading, setIsSettingsLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
-    // Apply dark mode and set app title from localStorage on initial client load
-    const storedSettings = localStorage.getItem(APP_SETTINGS_KEY);
-    if (storedSettings) {
-      try {
-        const parsedSettings: AppSettings = JSON.parse(storedSettings);
-        if (parsedSettings.storeName) {
-          setAppTitle(parsedSettings.storeName);
-        }
-        if (parsedSettings.darkMode) {
-          document.documentElement.classList.add('dark');
-        } else {
-          document.documentElement.classList.remove('dark');
-        }
-      } catch (e) {
-        console.error("Failed to parse settings in ClientLayoutWrapper", e);
-        setAppTitle(DEFAULT_APP_TITLE); // Fallback
-        document.documentElement.classList.remove('dark'); // Fallback
-      }
-    } else {
-        // No settings stored, use defaults
+    const fetchAppSettings = async () => {
+      setIsSettingsLoading(true);
+      if (!db) {
+        console.warn("Firestore not available. Using default settings.");
+        toast({
+          title: "Firebase Not Connected",
+          description: "App settings could not be loaded. Using defaults. Please check Firebase configuration.",
+          variant: "destructive",
+          duration: 10000,
+        });
         setAppTitle(DEFAULT_APP_TITLE);
         document.documentElement.classList.remove('dark');
-    }
+        setIsSettingsLoading(false);
+        return;
+      }
 
-    // Listen for changes to settings from other tabs/windows (optional but good practice)
-    const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === APP_SETTINGS_KEY && event.newValue) {
-        try {
-            const newSettings: AppSettings = JSON.parse(event.newValue);
-            if (newSettings.storeName) setAppTitle(newSettings.storeName);
-            if (newSettings.darkMode) {
-                document.documentElement.classList.add('dark');
-            } else {
-                document.documentElement.classList.remove('dark');
-            }
-        } catch(e) { console.error("Error processing storage change", e); }
+      try {
+        const settingsDocRef = doc(db, 'appSettings', APP_SETTINGS_DOC_ID);
+        const docSnap = await getDoc(settingsDocRef);
+
+        if (docSnap.exists()) {
+          const loadedSettings = docSnap.data() as AppSettings;
+          if (loadedSettings.storeName) {
+            setAppTitle(loadedSettings.storeName);
+          } else {
+            setAppTitle(DEFAULT_APP_TITLE);
+          }
+          if (loadedSettings.darkMode) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } else {
+          // No settings in Firestore, use defaults
+          setAppTitle(DEFAULT_APP_TITLE);
+          document.documentElement.classList.remove('dark');
+        }
+      } catch (error) {
+        console.error("Error fetching app settings from Firestore:", error);
+        toast({
+          title: "Error Loading Settings",
+          description: "Could not load app settings from Firestore. Using defaults.",
+          variant: "destructive",
+        });
+        setAppTitle(DEFAULT_APP_TITLE);
+        document.documentElement.classList.remove('dark');
+      } finally {
+        setIsSettingsLoading(false);
       }
     };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
 
-  }, [pathname]); // Re-check on pathname change if settings might have been updated on another page
+    fetchAppSettings();
+    // Consider adding a listener for Firestore settings changes if real-time updates are needed across tabs
+    // For now, settings are primarily managed on the /settings page and re-fetched on navigation/reload.
+  }, [pathname, toast]); // Re-fetch on pathname change to reflect potential updates from settings page
+
 
   return (
-    <SidebarProvider defaultOpen>
-      <Sidebar collapsible="icon" side="left" variant="sidebar" className="border-r">
-        <SidebarHeader className="p-4">
-          <div className="flex items-center justify-between">
-            <Link href="/dashboard" className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
-              <Home className="h-6 w-6 text-primary" />
-              <h2 className="text-lg font-semibold tracking-tight text-primary">
-                {appTitle}
-              </h2>
-            </Link>
-            <SidebarTrigger className="group-data-[collapsible=icon]:hidden md:flex" />
+    <QueryClientProvider client={queryClient}>
+      <SidebarProvider defaultOpen>
+        <Sidebar collapsible="icon" side="left" variant="sidebar" className="border-r">
+          <SidebarHeader className="p-4">
+            <div className="flex items-center justify-between">
+              <Link href="/dashboard" className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
+                <Home className="h-6 w-6 text-primary" />
+                {isSettingsLoading ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                ) : (
+                  <h2 className="text-lg font-semibold tracking-tight text-primary">
+                    {appTitle}
+                  </h2>
+                )}
+              </Link>
+              <SidebarTrigger className="group-data-[collapsible=icon]:hidden md:flex" />
+            </div>
+          </SidebarHeader>
+          <SidebarContent className="flex-grow p-2 flex flex-col">
+            <SidebarMenu className="space-y-1 flex-grow">
+              {navItems.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <Link href={item.href} legacyBehavior passHref>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname.startsWith(item.href)}
+                      tooltip={item.tooltip}
+                    >
+                      <a>
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </a>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarContent>
+          <SidebarFooter className="p-2 border-t">
+            <SidebarMenu>
+              {settingsNavItems.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <Link href={item.href} legacyBehavior passHref>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={pathname.startsWith(item.href)}
+                      tooltip={item.tooltip}
+                    >
+                      <a>
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </a>
+                    </SidebarMenuButton>
+                  </Link>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarFooter>
+        </Sidebar>
+        <SidebarInset>
+          <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6 md:hidden">
+              <SidebarTrigger />
+              <Link href="/dashboard" className="flex items-center gap-2">
+                  <Home className="h-5 w-5 text-primary" />
+                  {isSettingsLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  ) : (
+                    <h2 className="text-md font-semibold tracking-tight text-primary">{appTitle}</h2>
+                  )}
+              </Link>
+          </header>
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/40 min-h-[calc(100vh-3.5rem)] md:min-h-screen">
+              {children}
           </div>
-        </SidebarHeader>
-        <SidebarContent className="flex-grow p-2 flex flex-col">
-          <SidebarMenu className="space-y-1 flex-grow">
-            {navItems.map((item) => (
-              <SidebarMenuItem key={item.href}>
-                <Link href={item.href} legacyBehavior passHref>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname.startsWith(item.href)}
-                    tooltip={item.tooltip}
-                  >
-                    <a>
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </Link>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarContent>
-        <SidebarFooter className="p-2 border-t">
-           <SidebarMenu>
-            {settingsNavItems.map((item) => (
-              <SidebarMenuItem key={item.href}>
-                <Link href={item.href} legacyBehavior passHref>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={pathname.startsWith(item.href)}
-                    tooltip={item.tooltip}
-                  >
-                    <a>
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </Link>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarFooter>
-      </Sidebar>
-      <SidebarInset>
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-background px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6 md:hidden">
-            <SidebarTrigger />
-             <Link href="/dashboard" className="flex items-center gap-2">
-                <Home className="h-5 w-5 text-primary" />
-                <h2 className="text-md font-semibold tracking-tight text-primary">{appTitle}</h2>
-            </Link>
-        </header>
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/40 min-h-[calc(100vh-3.5rem)] md:min-h-screen">
-            {children}
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+        </SidebarInset>
+      </SidebarProvider>
+    </QueryClientProvider>
   );
 }

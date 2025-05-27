@@ -7,102 +7,136 @@ import { Button } from '@/components/ui/button';
 import { PurchaseOrderForm } from '@/components/PurchaseOrderForm';
 import { PurchaseOrderTable } from '@/components/PurchaseOrderTable';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { PlusCircle, PackagePlus } from 'lucide-react';
+import { PlusCircle, PackagePlus, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { db } from '@/lib/firebase';
+import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch, query as firestoreQuery, orderBy } from 'firebase/firestore';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+const PURCHASE_ORDERS_COLLECTION = 'purchaseOrders';
+const PRODUCTS_COLLECTION = 'products';
+
+// Fetcher functions
+const fetchPurchaseOrders = async (): Promise<PurchaseOrder[]> => {
+  if (!db) throw new Error("Firestore not available");
+  const poCol = collection(db, PURCHASE_ORDERS_COLLECTION);
+  // Example: Order by orderDate descending
+  const q = firestoreQuery(poCol, orderBy("orderDate", "desc"));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PurchaseOrder));
+};
+
+const fetchProducts = async (): Promise<Product[]> => {
+  if (!db) throw new Error("Firestore not available");
+  const productsCol = collection(db, PRODUCTS_COLLECTION);
+  const snapshot = await getDocs(productsCol);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+};
+
 
 export default function PurchasesPage() {
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [purchaseOrderToEdit, setPurchaseOrderToEdit] = useState<PurchaseOrder | null>(null);
-  const [isMounted, setIsMounted] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: purchaseOrders = [], isLoading: isLoadingPOs, isError: isPOsError, error: posError } = useQuery<PurchaseOrder[], Error>({
+    queryKey: [PURCHASE_ORDERS_COLLECTION],
+    queryFn: fetchPurchaseOrders,
+    enabled: !!db,
+  });
+
+  const { data: products = [], isLoading: isLoadingProducts, isError: isProductsError, error: productsError } = useQuery<Product[], Error>({
+    queryKey: [PRODUCTS_COLLECTION],
+    queryFn: fetchProducts,
+    enabled: !!db,
+  });
 
   useEffect(() => {
-    setIsMounted(true);
-    const storedPurchaseOrders = localStorage.getItem('purchaseOrders');
-    if (storedPurchaseOrders) {
-      try {
-        setPurchaseOrders(JSON.parse(storedPurchaseOrders));
-      } catch (e) {
-        console.error("Failed to parse purchaseOrders from localStorage", e);
-        setPurchaseOrders([]);
-      }
-    }
-    const storedProducts = localStorage.getItem('products');
-    if (storedProducts) {
-      try {
-        setProducts(JSON.parse(storedProducts));
-      } catch (e) {
-        console.error("Failed to parse products from localStorage", e);
-        setProducts([]); // Initialize to empty array on error
-      }
-    } else {
-      setProducts([]); // Initialize if no products in localStorage
-    }
-  }, []);
+    if (isPOsError) toast({ title: 'Error Loading Purchase Orders', description: posError?.message, variant: 'destructive' });
+    if (isProductsError) toast({ title: 'Error Loading Products', description: productsError?.message, variant: 'destructive' });
+  }, [isPOsError, posError, isProductsError, productsError, toast]);
 
-  useEffect(() => {
-    if (isMounted) {
-      localStorage.setItem('purchaseOrders', JSON.stringify(purchaseOrders));
-    }
-  }, [purchaseOrders, isMounted]);
 
-  useEffect(() => {
-    if (isMounted) {
-      localStorage.setItem('products', JSON.stringify(products));
-    }
-  }, [products, isMounted]);
+  const updateProductStockMutation = useMutation<void, Error, { orderForStockUpdate: PurchaseOrder; isReverting: boolean }>({
+    mutationFn: async ({ orderForStockUpdate, isReverting }) => {
+      if (!db) throw new Error("Firestore not available");
+      if (orderForStockUpdate.status !== 'Received' && !isReverting) return;
 
-  const updateProductStock = (orderForStockUpdate: PurchaseOrder, isReverting: boolean = false) => {
-    if (orderForStockUpdate.status !== 'Received' && !isReverting) return; // Only update stock for 'Received' orders or when reverting a 'Received' order
-    
-    setProducts(currentProducts => {
-      const updatedProducts = currentProducts.map(p => ({ ...p })); // Deep copy to ensure re-render
+      const batch = writeBatch(db);
+      const productsToUpdateLocally = [...products]; // Use a local copy of products from query data
 
-      orderForStockUpdate.items.forEach(item => {
-        const productIndex = updatedProducts.findIndex(p => p.id === item.productId);
-        if (productIndex > -1) {
+      for (const item of orderForStockUpdate.items) {
+        const product = productsToUpdateLocally.find(p => p.id === item.productId);
+        if (product) {
+          const productRef = doc(db, PRODUCTS_COLLECTION, item.productId);
           const operation = isReverting ? -1 : 1;
-          updatedProducts[productIndex].stockQuantity += (item.quantity * operation);
-          if (updatedProducts[productIndex].stockQuantity < 0) {
-            updatedProducts[productIndex].stockQuantity = 0; // Prevent negative stock
-          }
+          const newStockQuantity = Math.max(0, product.stockQuantity + (item.quantity * operation));
+          batch.update(productRef, { stockQuantity: newStockQuantity });
         }
-      });
-      return updatedProducts;
-    });
-  };
+      }
+      await batch.commit();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [PRODUCTS_COLLECTION] });
+      if (variables.orderForStockUpdate.status === 'Received' && !variables.isReverting) {
+        toast({ title: 'Stock Updated', description: `Product quantities updated based on received order.` });
+      } else if (variables.isReverting){
+         toast({ title: 'Stock Reverted', description: 'Stock quantities adjusted.' });
+      }
+    },
+    onError: (error) => {
+      toast({ title: 'Error Updating Stock', description: error.message, variant: 'destructive' });
+    }
+  });
+
+  const purchaseOrderMutation = useMutation<void, Error, { orderData: PurchaseOrder; isEditing: boolean; originalOrder?: PurchaseOrder }>({
+    mutationFn: async ({ orderData, isEditing, originalOrder }) => {
+      if (!db) throw new Error("Firestore not available");
+      const poRef = doc(db, PURCHASE_ORDERS_COLLECTION, orderData.id);
+      await setDoc(poRef, orderData, { merge: isEditing });
+
+      // Stock update logic
+      if (originalOrder && originalOrder.status === 'Received') {
+        await updateProductStockMutation.mutateAsync({ orderForStockUpdate: originalOrder, isReverting: true });
+      }
+      if (orderData.status === 'Received') {
+        await updateProductStockMutation.mutateAsync({ orderForStockUpdate: orderData, isReverting: false });
+      }
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [PURCHASE_ORDERS_COLLECTION] });
+      toast({ title: variables.isEditing ? 'Purchase Order Updated' : 'Purchase Order Added', description: `Order from ${variables.orderData.supplierName} has been saved.` });
+      setIsFormOpen(false);
+      setPurchaseOrderToEdit(null);
+    },
+    onError: (error) => {
+      toast({ title: 'Error Saving Purchase Order', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const deletePurchaseOrderMutation = useMutation<void, Error, string>({
+    mutationFn: async (orderId: string) => {
+      if (!db) throw new Error("Firestore not available");
+      const orderToDelete = purchaseOrders.find(po => po.id === orderId);
+      if (orderToDelete && orderToDelete.status === 'Received') {
+        await updateProductStockMutation.mutateAsync({ orderForStockUpdate: orderToDelete, isReverting: true });
+      }
+      await deleteDoc(doc(db, PURCHASE_ORDERS_COLLECTION, orderId));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [PURCHASE_ORDERS_COLLECTION] });
+      toast({ title: 'Purchase Order Deleted', description: 'The purchase order has been removed.', variant: 'destructive' });
+    },
+    onError: (error) => {
+      toast({ title: 'Error Deleting Purchase Order', description: error.message, variant: 'destructive' });
+    },
+  });
+
 
   const handleSavePurchaseOrder = (orderData: PurchaseOrder) => {
     const originalOrder = purchaseOrders.find(po => po.id === orderData.id);
-
-    setPurchaseOrders(prevOrders => {
-      const existingIndex = prevOrders.findIndex(po => po.id === orderData.id);
-      let updatedOrders;
-      if (existingIndex > -1) {
-        updatedOrders = [...prevOrders];
-        updatedOrders[existingIndex] = orderData;
-        toast({ title: 'Purchase Order Updated', description: `Order from ${orderData.supplierName} has been updated.` });
-      } else {
-        updatedOrders = [orderData, ...prevOrders];
-        toast({ title: 'Purchase Order Added', description: `New order from ${orderData.supplierName} has been recorded.` });
-      }
-      return updatedOrders;
-    });
-
-    // Stock update logic: Revert old stock if applicable, then apply new stock if applicable.
-    if (originalOrder && originalOrder.status === 'Received') {
-      // Revert stock from the original state of the order if it was 'Received'
-      updateProductStock(originalOrder, true);
-    }
-    if (orderData.status === 'Received') {
-      // Apply stock from the new state of the order if it's 'Received'
-      updateProductStock(orderData, false);
-       toast({ title: 'Stock Updated', description: `Product quantities updated based on received order.` });
-    }
-    
-    setPurchaseOrderToEdit(null);
+    purchaseOrderMutation.mutate({ orderData, isEditing: !!originalOrder, originalOrder });
   };
 
   const handleAddNewPurchaseOrder = () => {
@@ -116,15 +150,28 @@ export default function PurchasesPage() {
   };
 
   const handleDeletePurchaseOrder = (orderId: string) => {
-    const orderToDelete = purchaseOrders.find(po => po.id === orderId);
-    if (orderToDelete && orderToDelete.status === 'Received') {
-      // Revert stock if deleting a 'Received' order
-      updateProductStock(orderToDelete, true);
-      toast({ title: 'Stock Reverted', description: 'Stock quantities adjusted for deleted received order.' });
-    }
-    setPurchaseOrders(prevOrders => prevOrders.filter(po => po.id !== orderId));
-    toast({ title: 'Purchase Order Deleted', description: 'The purchase order has been removed.', variant: 'destructive' });
+    deletePurchaseOrderMutation.mutate(orderId);
   };
+
+  if (!db) {
+    return (
+      <div className="space-y-8">
+        <Card className="border-destructive">
+          <CardHeader><CardTitle className="text-destructive">Firebase Not Connected</CardTitle></CardHeader>
+          <CardContent><p>Cannot load purchase orders. Please check Firebase configuration.</p></CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isLoadingPOs || isLoadingProducts) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-4 text-lg">Loading purchase data...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -135,10 +182,10 @@ export default function PurchasesPage() {
             Purchase Orders
           </h1>
           <p className="text-muted-foreground text-md">
-            Manage your inventory purchases and suppliers.
+            Manage your inventory purchases and suppliers. Data stored in Firestore.
           </p>
         </div>
-        <Button onClick={handleAddNewPurchaseOrder}>
+        <Button onClick={handleAddNewPurchaseOrder} disabled={purchaseOrderMutation.isPending}>
           <PlusCircle className="mr-2 h-4 w-4" />
           Add Purchase Order
         </Button>
@@ -164,6 +211,7 @@ export default function PurchasesPage() {
             purchaseOrders={purchaseOrders} 
             onEdit={handleEditPurchaseOrder}
             onDelete={handleDeletePurchaseOrder}
+            isLoading={deletePurchaseOrderMutation.isPending || purchaseOrderMutation.isPending || updateProductStockMutation.isPending}
           />
         </CardContent>
       </Card>

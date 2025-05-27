@@ -19,25 +19,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import QRCodeScannerComponent from '@/components/topup-cards/QRCodeScannerComponent'; // For scanning payment card
+import QRCodeScannerComponent from '@/components/topup-cards/QRCodeScannerComponent';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-const APP_SETTINGS_KEY = 'appSettings';
-
 interface SaleFormProps {
-  onRecordSale: (saleData: Omit<SoldProduct, "id" | "timestamp" | "staffId" | "staffName">) => void;
+  onRecordSale: (
+    saleData: Omit<SoldProduct, "id" | "timestamp" | "staffId" | "staffName">,
+    paymentCardDetails?: { card: TopUpCard; saleTotal: number } // Pass full card object and saleTotal
+  ) => void;
   soldItemsForAISuggestion: Pick<SoldProduct, 'name' | 'price'>[];
   availableProducts: Product[];
-  findCardById: (cardId: string) => TopUpCard | undefined;
-  onDeductFromCard: (cardId: string, amount: number, notes: string) => boolean;
+  findCardByCardId: (cardId: string) => TopUpCard | undefined; // Changed from findCardById to findCardByCardId for clarity
+  appSettings: Partial<AppSettings>; // Pass appSettings as a prop
 }
 
 export function SaleForm({ 
   onRecordSale, 
   soldItemsForAISuggestion, 
   availableProducts,
-  findCardById,
-  onDeductFromCard
+  findCardByCardId,
+  appSettings
 }: SaleFormProps) {
   const [productName, setProductName] = useState("");
   const [quantity, setQuantity] = useState<number | string>(1);
@@ -54,38 +55,25 @@ export function SaleForm({
   const [total, setTotal] = useState(0);
   const [currentTaxRate, setCurrentTaxRate] = useState(DEFAULT_TAX_RATE);
 
-
   const [isSuggesting, setIsSuggesting] = useState(false);
   const { toast } = useToast();
 
-  // State for Top-Up Card Payment
   const [paymentCardIdInput, setPaymentCardIdInput] = useState('');
   const [verifiedPaymentCard, setVerifiedPaymentCard] = useState<TopUpCard | null>(null);
   const [isScanningPaymentCard, setIsScanningPaymentCard] = useState(false);
 
   useEffect(() => {
-    const storedSettings = localStorage.getItem(APP_SETTINGS_KEY);
-    if (storedSettings) {
-      try {
-        const parsedSettings: AppSettings = JSON.parse(storedSettings);
-        if (parsedSettings.taxRate !== undefined) {
-          const rate = parseFloat(parsedSettings.taxRate);
-          if (!isNaN(rate) && rate >= 0 && rate <= 100) {
-            setCurrentTaxRate(rate / 100);
-          } else {
-            setCurrentTaxRate(DEFAULT_TAX_RATE);
-          }
-        } else {
-          setCurrentTaxRate(DEFAULT_TAX_RATE);
-        }
-      } catch (e) {
-        console.error("Failed to parse tax rate from settings", e);
+    if (appSettings.taxRate !== undefined) {
+      const rate = parseFloat(appSettings.taxRate);
+      if (!isNaN(rate) && rate >= 0 && rate <= 100) {
+        setCurrentTaxRate(rate / 100);
+      } else {
         setCurrentTaxRate(DEFAULT_TAX_RATE);
       }
     } else {
-        setCurrentTaxRate(DEFAULT_TAX_RATE);
+      setCurrentTaxRate(DEFAULT_TAX_RATE);
     }
-  }, []);
+  }, [appSettings.taxRate]);
 
 
   const formatCurrency = (amount: number) => {
@@ -107,7 +95,6 @@ export function SaleForm({
       } else if (discountType === 'fixed') {
         currentDiscountAmount = numDiscountValue;
       }
-      // Ensure discount doesn't exceed subtotal
       currentDiscountAmount = Math.min(currentDiscountAmount, currentSubtotalBeforeDiscount);
       setCalculatedDiscountAmount(currentDiscountAmount);
       
@@ -130,10 +117,9 @@ export function SaleForm({
 
   useEffect(() => {
     calculateTotals();
-  }, [quantity, price, currentTaxRate, discountType, discountValue, calculateTotals]);
+  }, [calculateTotals]); // calculateTotals includes all its dependencies
 
   useEffect(() => {
-    // Reset card verification if payment method changes from Top-Up Card
     if (paymentMethod !== 'Top-Up Card') {
       setVerifiedPaymentCard(null);
       setPaymentCardIdInput('');
@@ -192,16 +178,16 @@ export function SaleForm({
   };
 
   const handleVerifyPaymentCard = (idToVerify: string) => {
-    const card = findCardById(idToVerify.toUpperCase());
+    const card = findCardByCardId(idToVerify.toUpperCase()); // Use the passed prop
     if (card) {
       setVerifiedPaymentCard(card);
-      setPaymentCardIdInput(card.cardId); // Ensure input reflects verified ID
+      setPaymentCardIdInput(card.cardId);
       toast({ title: "Card Verified", description: `Card ${card.cardId} balance: ${formatCurrency(card.currentBalance)}`});
     } else {
       setVerifiedPaymentCard(null);
       toast({ title: "Card Not Found", description: `No card found with ID ${idToVerify}.`, variant: "destructive"});
     }
-    setIsScanningPaymentCard(false); // Stop scanner if it was active
+    setIsScanningPaymentCard(false);
   };
 
   const onScanSuccessForPaymentCard = (decodedText: string) => {
@@ -222,7 +208,6 @@ export function SaleForm({
     const productInStock = availableProducts.find(p => p.id === selectedProductId);
     const costOfGoodsSold = productInStock?.costOfGoodsSold;
 
-
     if (selectedProductId) {
       if (productInStock && productInStock.stockQuantity < numQuantity) {
         toast({ title: "Insufficient Stock", description: `Only ${productInStock.stockQuantity} of ${productName} available.`, variant: "destructive" });
@@ -230,7 +215,7 @@ export function SaleForm({
       }
     }
 
-    let cardIdUsedForSale: string | undefined = undefined;
+    let paymentCardDetails: { card: TopUpCard; saleTotal: number } | undefined = undefined;
 
     if (paymentMethod === "Top-Up Card") {
       if (!verifiedPaymentCard) {
@@ -245,13 +230,7 @@ export function SaleForm({
         });
         return;
       }
-      const deductionNotes = `Sale: ${productName} x${numQuantity}`;
-      const deductionSuccess = onDeductFromCard(verifiedPaymentCard.cardId, total, deductionNotes);
-      if (!deductionSuccess) {
-         // onDeductFromCard should already show a toast on failure.
-        return;
-      }
-      cardIdUsedForSale = verifiedPaymentCard.cardId;
+      paymentCardDetails = { card: verifiedPaymentCard, saleTotal: total };
     }
 
     onRecordSale({ 
@@ -268,15 +247,15 @@ export function SaleForm({
         productId: selectedProductId,
         costOfGoodsSoldAtTimeOfSale: costOfGoodsSold,
         paymentMethod: paymentMethod,
-        cardIdUsed: cardIdUsedForSale,
-    });
+        cardIdUsed: paymentMethod === "Top-Up Card" && verifiedPaymentCard ? verifiedPaymentCard.cardId : undefined,
+    }, paymentCardDetails); // Pass card details here
 
     // Reset form
     setProductName("");
     setQuantity(1);
     setPrice("");
     setSelectedProductId(undefined);
-    setPaymentMethod(PAYMENT_METHODS[0]); // Reset to default payment method
+    setPaymentMethod(PAYMENT_METHODS[0]);
     setPaymentCardIdInput('');
     setVerifiedPaymentCard(null);
     setIsScanningPaymentCard(false);
@@ -380,7 +359,6 @@ export function SaleForm({
             </div>
           </div>
 
-          {/* Discount Section */}
           <Card className="p-4 space-y-3 bg-muted/20 border-dashed">
             <div className="flex justify-between items-center">
               <Label className="text-md font-medium flex items-center"><Tag className="mr-2 h-5 w-5 text-primary"/>Discount</Label>
@@ -476,7 +454,6 @@ export function SaleForm({
             </Card>
           )}
 
-
           <div className="space-y-3 rounded-md bg-muted/50 p-4 border">
             <h3 className="text-sm font-medium text-muted-foreground">Sale Summary</h3>
             <div className="flex justify-between text-sm">
@@ -503,8 +480,8 @@ export function SaleForm({
             </div>
           </div>
           
-          <Button type="submit" className="w-full" disabled={!canSubmit}>
-            <PlusSquare className="mr-2 h-5 w-5" />
+          <Button type="submit" className="w-full" disabled={!canSubmit || recordSaleMutation.isPending}>
+            {recordSaleMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <PlusSquare className="mr-2 h-5 w-5" />}
             Record Sale
           </Button>
         </form>
