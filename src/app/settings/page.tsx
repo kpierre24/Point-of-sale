@@ -62,7 +62,9 @@ export default function SettingsPage() {
       } else {
         document.documentElement.classList.remove('dark');
       }
-      toast({ title: "Dark Mode " + (checked ? "Enabled" : "Disabled") });
+      setTimeout(() => {
+        toast({ title: "Dark Mode " + (checked ? "Enabled" : "Disabled") });
+      }, 0);
       return newSettings;
     });
   };
