@@ -1,6 +1,8 @@
+
 "use client"
 
 import * as React from "react"
+import * as DialogPrimitive from "@radix-ui/react-dialog" // Added import
 import { Slot } from "@radix-ui/react-slot"
 import { VariantProps, cva } from "class-variance-authority"
 import { PanelLeft } from "lucide-react"
@@ -206,6 +208,8 @@ const Sidebar = React.forwardRef<
             }
             side={side}
           >
+            {/* Added accessible title for screen readers */}
+            <DialogPrimitive.Title className="sr-only">Sidebar Menu</DialogPrimitive.Title>
             <div className="flex h-full w-full flex-col">{children}</div>
           </SheetContent>
         </Sheet>
