@@ -154,7 +154,7 @@ export default function TopUpCardsPage() {
         toast({ title: `${action} Successful`, description: `${formatCurrency(Math.abs(variables.transactionData.amount))} ${action === 'Top-Up' ? 'added to' : 'deducted from'} card ${variables.cardToUpdate.cardId}.` });
     },
     onError: (error) => {
-        toast({ title: 'Transaction Error', description: error.message, variant: 'destructive' });
+        toast({ title: 'Transaction Error', description: error.message || 'An unexpected error occurred.', variant: 'destructive' });
     }
   });
 
@@ -181,42 +181,50 @@ export default function TopUpCardsPage() {
     // Transactions for selected card will be fetched by its own useQuery hook
   };
 
-  const handleTopUp = useCallback((cardId: string, amount: number, notes?: string) => {
-    const cardToUpdate = cards.find(c => c.cardId === cardId);
+  const handleTopUp = useCallback((cardToUpdate: TopUpCard, amount: number, notes?: string) => {
     if (!cardToUpdate) {
-        toast({ title: 'Error', description: 'Card not found for top-up.', variant: 'destructive' });
+        toast({ title: 'Error', description: 'Card data is missing for top-up.', variant: 'destructive' });
         return;
     }
     const newBalance = cardToUpdate.currentBalance + amount;
     const now = new Date().toISOString();
     const transactionData: Omit<CardTransaction, 'id'> = {
-        cardId, timestamp: now, type: 'Top-Up', amount,
-        balanceBefore: cardToUpdate.currentBalance, balanceAfter: newBalance,
-        staffMember: 'Staff User', notes,
+        cardId: cardToUpdate.cardId,
+        timestamp: now,
+        type: 'Top-Up',
+        amount,
+        balanceBefore: cardToUpdate.currentBalance,
+        balanceAfter: newBalance,
+        staffMember: 'Staff User',
+        notes,
     };
-    cardTransactionMutation.mutate({cardToUpdate, transactionData, newBalance, type: 'Top-Up'});
-  }, [cards, toast, cardTransactionMutation]);
+    cardTransactionMutation.mutate({ cardToUpdate, transactionData, newBalance, type: 'Top-Up' });
+  }, [toast, cardTransactionMutation]);
 
-  const handleDeduct = useCallback((cardId: string, amountToDeduct: number, notes?: string): boolean => {
-    const cardToUpdate = cards.find(c => c.cardId === cardId);
+  const handleDeduct = useCallback((cardToUpdate: TopUpCard, amountToDeduct: number, notes?: string): boolean => {
     if (!cardToUpdate) {
-      toast({ title: 'Card Not Found', description: `Card ${cardId} not found for deduction.`, variant: 'destructive' });
+      toast({ title: 'Card Not Found', description: `Card data is missing for deduction.`, variant: 'destructive' });
       return false;
     }
     if (cardToUpdate.currentBalance < amountToDeduct) {
-      toast({ title: 'Insufficient Balance', description: `Card ${cardId} has only ${formatCurrency(cardToUpdate.currentBalance)}. Deduction of ${formatCurrency(amountToDeduct)} failed.`, variant: 'destructive' });
+      toast({ title: 'Insufficient Balance', description: `Card ${cardToUpdate.cardId} has only ${formatCurrency(cardToUpdate.currentBalance)}. Deduction of ${formatCurrency(amountToDeduct)} failed.`, variant: 'destructive' });
       return false;
     }
     const newBalance = cardToUpdate.currentBalance - amountToDeduct;
     const now = new Date().toISOString();
     const transactionData: Omit<CardTransaction, 'id'> = {
-        cardId, timestamp: now, type: 'Purchase', amount: -amountToDeduct,
-        balanceBefore: cardToUpdate.currentBalance, balanceAfter: newBalance,
-        staffMember: 'Staff User', notes,
+        cardId: cardToUpdate.cardId,
+        timestamp: now,
+        type: 'Purchase',
+        amount: -amountToDeduct,
+        balanceBefore: cardToUpdate.currentBalance,
+        balanceAfter: newBalance,
+        staffMember: 'Staff User',
+        notes,
     };
-    cardTransactionMutation.mutate({cardToUpdate, transactionData, newBalance, type: 'Deduct'});
+    cardTransactionMutation.mutate({ cardToUpdate, transactionData, newBalance, type: 'Deduct' });
     return true;
-  }, [cards, toast, cardTransactionMutation]);
+  }, [toast, cardTransactionMutation]);
 
 
   const onScanSuccess = (decodedText: string) => {

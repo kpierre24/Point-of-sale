@@ -1,3 +1,4 @@
+
 // src/components/topup-cards/ManageCardDialog.tsx
 "use client";
 
@@ -28,8 +29,8 @@ interface ManageCardDialogProps {
   onOpenChange: (isOpen: boolean) => void;
   card: TopUpCard | null;
   transactions: CardTransaction[];
-  onTopUp: (cardId: string, amount: number, notes?: string) => void;
-  onDeduct: (cardId: string, amount: number, notes?: string) => boolean; // Returns true if successful
+  onTopUp: (cardToUpdate: TopUpCard, amount: number, notes?: string) => void;
+  onDeduct: (cardToUpdate: TopUpCard, amount: number, notes?: string) => boolean; // Returns true if successful
   onRefreshCardData?: (cardId: string) => void; // To refresh card data if needed
 }
 
@@ -76,10 +77,9 @@ export function ManageCardDialog({
       toast({ title: 'Invalid Amount', description: 'Top-up amount must be positive.', variant: 'destructive' });
       return;
     }
-    onTopUp(card.cardId, amount, topUpNotes);
+    onTopUp(card, amount, topUpNotes);
     setTopUpAmount('');
     setTopUpNotes('');
-    toast({ title: 'Top-Up Successful', description: `${formatCurrency(amount)} added to card ${card.cardId}.` });
   };
 
   const handleDeductSubmit = (e: React.FormEvent) => {
@@ -89,11 +89,10 @@ export function ManageCardDialog({
       toast({ title: 'Invalid Amount', description: 'Deduction amount must be positive.', variant: 'destructive' });
       return;
     }
-    const success = onDeduct(card.cardId, amount, deductNotes);
+    const success = onDeduct(card, amount, deductNotes);
     if (success) {
       setDeductAmount('');
       setDeductNotes('');
-      toast({ title: 'Deduction Successful', description: `${formatCurrency(amount)} deducted from card ${card.cardId}.` });
     } else {
        // onDeduct should handle its own toast for insufficient funds
     }
@@ -224,4 +223,3 @@ export function ManageCardDialog({
     </Dialog>
   );
 }
-
