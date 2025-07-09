@@ -25,7 +25,9 @@ import {
 } from "@/components/ui/select";
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
-import { ScrollArea } from './ui/scroll-area'; // Added ScrollArea
+import { ScrollArea } from './ui/scroll-area';
+import { suggestProductAttributes, type SuggestProductAttributesInput } from '@/ai/flows/suggest-product-attributes';
+import { Wand2, Loader2 } from 'lucide-react';
 
 interface ProductFormProps {
   isOpen: boolean;
@@ -48,6 +50,7 @@ const defaultProduct: Omit<Product, 'id'> = {
 
 export function ProductForm({ isOpen, onOpenChange, onSave, productToEdit, availableRecipes = [] }: ProductFormProps) {
   const [product, setProduct] = useState<Omit<Product, 'id'>>(defaultProduct);
+  const [isSuggesting, setIsSuggesting] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -85,6 +88,32 @@ export function ProductForm({ isOpen, onOpenChange, onSave, productToEdit, avail
       }));
       toast({ title: "Recipe Loaded", description: `Details from "${selectedRecipe.name}" applied.` });
     }
+  };
+  
+  const handleSuggestAttributes = async () => {
+      if (!product.name.trim()) {
+        toast({ title: "Product Name Required", description: "Please enter a product name before getting suggestions.", variant: "destructive" });
+        return;
+      }
+      setIsSuggesting(true);
+      try {
+        const input: SuggestProductAttributesInput = {
+          productName: product.name,
+          existingCategory: product.category || undefined,
+        };
+        const result = await suggestProductAttributes(input);
+        setProduct(prev => ({
+          ...prev,
+          description: result.description,
+          category: result.category,
+        }));
+        toast({ title: "AI Suggestions Applied", description: "Description and category have been updated." });
+      } catch (error) {
+        console.error("Error suggesting attributes:", error);
+        toast({ title: "Suggestion Error", description: "Could not get AI suggestions.", variant: "destructive" });
+      } finally {
+        setIsSuggesting(false);
+      }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -147,10 +176,22 @@ export function ProductForm({ isOpen, onOpenChange, onSave, productToEdit, avail
               <Label htmlFor="name">Product Name*</Label>
               <Input id="name" name="name" value={product.name} onChange={handleChange} required />
             </div>
-            <div>
-              <Label htmlFor="description">Description</Label>
-              <Textarea id="description" name="description" value={product.description || ''} onChange={handleChange} />
+            
+            <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                    <Label htmlFor="description">Description</Label>
+                    <Button type="button" variant="ghost" size="sm" onClick={handleSuggestAttributes} disabled={isSuggesting || !product.name}>
+                        {isSuggesting ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                            <Wand2 className="mr-2 h-4 w-4" />
+                        )}
+                        Suggest
+                    </Button>
+                </div>
+                <Textarea id="description" name="description" value={product.description || ''} onChange={handleChange} />
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="costOfGoodsSold">Cost of Goods Sold ($)</Label>
