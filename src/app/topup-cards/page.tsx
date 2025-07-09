@@ -84,8 +84,8 @@ export default function TopUpCardsPage() {
   });
 
   useEffect(() => {
-    if (isCardsError) toast({ title: 'Error Loading Cards', description: cardsError?.message, variant: 'destructive' });
-    if (isCustomersError) toast({ title: 'Error Loading Customers', description: customersError?.message, variant: 'destructive' });
+    if (isCardsError) toast({ title: 'Error Loading Cards', description: cardsError?.message || 'An unexpected error occurred.', variant: 'destructive' });
+    if (isCustomersError) toast({ title: 'Error Loading Customers', description: customersError?.message || 'An unexpected error occurred.', variant: 'destructive' });
   }, [isCardsError, cardsError, isCustomersError, customersError, toast]);
 
   const cardMutation = useMutation<void, Error, { cardData: Omit<TopUpCard, 'id'>; initialTransactionData?: Omit<CardTransaction, 'id'> }>({
@@ -97,8 +97,8 @@ export default function TopUpCardsPage() {
       const cardToSave = { ...cardData };
       Object.keys(cardToSave).forEach(keyStr => {
         const key = keyStr as keyof typeof cardToSave;
-        if (cardToSave[key] === undefined) {
-          delete cardToSave[key];
+        if ((cardToSave as any)[key] === undefined) {
+          delete (cardToSave as any)[key];
         }
       });
       batch.set(newCardRef, cardToSave);
@@ -118,7 +118,7 @@ export default function TopUpCardsPage() {
       setIsCreateDialogOpen(false);
     },
     onError: (error) => {
-      toast({ title: 'Error Creating Card', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error Creating Card', description: error.message || 'An unexpected error occurred.', variant: 'destructive' });
     }
   });
   
@@ -133,8 +133,8 @@ export default function TopUpCardsPage() {
         const transactionToSave = { ...transactionData };
         Object.keys(transactionToSave).forEach(keyStr => {
             const key = keyStr as keyof typeof transactionToSave;
-            if(transactionToSave[key] === undefined) {
-                delete transactionToSave[key];
+            if((transactionToSave as any)[key] === undefined) {
+                delete (transactionToSave as any)[key];
             }
         });
 
@@ -342,7 +342,7 @@ export default function TopUpCardsPage() {
         <CardContent className="grid md:grid-cols-2 gap-6">
           <div>
              <QRCodeScannerComponent 
-                onScanSuccess={onScanSuccess}
+                onScanSuccess={(decodedText) => onScanSuccess(decodedText)}
                 onScanFailure={(err) => console.warn("QR Scan Error:", err)}
                 active={isScannerActive}
                 setActive={setIsScannerActive}

@@ -24,7 +24,7 @@ import { Download } from 'lucide-react';
 interface CreateTopUpCardDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onCardCreated: (newCard: TopUpCard, initialTransaction?: CardTransaction) => void;
+  onCardCreated: (newCardData: Omit<TopUpCard, 'id'>, initialTransactionData?: Omit<CardTransaction, 'id'>) => void;
   existingCustomers: Customer[];
   generateNewCardId: () => string;
 }
@@ -79,8 +79,7 @@ export function CreateTopUpCardDialog({
     }
 
     const now = new Date().toISOString();
-    const newCard: TopUpCard = {
-      id: crypto.randomUUID(), // Internal ID
+    const newCardData: Omit<TopUpCard, 'id'> = {
       cardId: cardId.trim().toUpperCase(),
       customerId: customerId,
       currentBalance: balance,
@@ -89,11 +88,10 @@ export function CreateTopUpCardDialog({
       lastUpdatedAt: now,
     };
 
-    let initialTransaction: CardTransaction | undefined;
+    let initialTransactionData: Omit<CardTransaction, 'id'> | undefined;
     if (balance > 0) {
-      initialTransaction = {
-        id: crypto.randomUUID(),
-        cardId: newCard.cardId,
+      initialTransactionData = {
+        cardId: newCardData.cardId,
         timestamp: now,
         type: 'Creation',
         amount: balance,
@@ -104,8 +102,7 @@ export function CreateTopUpCardDialog({
       };
     }
 
-    onCardCreated(newCard, initialTransaction);
-    toast({ title: 'Card Created', description: `Card ${newCard.cardId} created successfully.` });
+    onCardCreated(newCardData, initialTransactionData);
     onOpenChange(false);
   };
 
