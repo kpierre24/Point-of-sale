@@ -100,8 +100,18 @@ export default function ProductsPage() {
   const productMutation = useMutation<void, Error, { product: Product; isEditing: boolean }>({
     mutationFn: async ({ product, isEditing }) => {
       if (!db) throw new Error("Firestore not available");
-      const productRef = doc(db, PRODUCTS_COLLECTION, product.id);
-      await setDoc(productRef, product, { merge: isEditing }); 
+
+      const productToSave = { ...product };
+      // Firestore does not allow `undefined` values. This loop removes any keys
+      // with an undefined value before attempting to save the document.
+      Object.keys(productToSave).forEach(key => {
+        if (productToSave[key as keyof Product] === undefined) {
+          delete productToSave[key as keyof Product];
+        }
+      });
+
+      const productRef = doc(db, PRODUCTS_COLLECTION, productToSave.id);
+      await setDoc(productRef, productToSave, { merge: isEditing }); 
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [PRODUCTS_COLLECTION] });
