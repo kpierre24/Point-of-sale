@@ -1,3 +1,4 @@
+
 // src/app/topup-cards/page.tsx
 "use client";
 
@@ -92,7 +93,15 @@ export default function TopUpCardsPage() {
       if (!db) throw new Error("Firestore not available");
       const batch = writeBatch(db);
       const newCardRef = doc(collection(db, TOPUP_CARDS_COLLECTION)); // Auto-generate ID
-      batch.set(newCardRef, cardData);
+      
+      const cardToSave = { ...cardData };
+      Object.keys(cardToSave).forEach(keyStr => {
+        const key = keyStr as keyof typeof cardToSave;
+        if (cardToSave[key] === undefined) {
+          delete cardToSave[key];
+        }
+      });
+      batch.set(newCardRef, cardToSave);
 
       if (initialTransactionData) {
         const newTransactionRef = doc(collection(db, CARD_TRANSACTIONS_COLLECTION)); // Auto-generate ID
@@ -121,8 +130,16 @@ export default function TopUpCardsPage() {
         const cardRef = doc(db, TOPUP_CARDS_COLLECTION, cardToUpdate.id); // Use Firestore doc ID
         batch.update(cardRef, { currentBalance: newBalance, lastUpdatedAt: new Date().toISOString() });
         
+        const transactionToSave = { ...transactionData };
+        Object.keys(transactionToSave).forEach(keyStr => {
+            const key = keyStr as keyof typeof transactionToSave;
+            if(transactionToSave[key] === undefined) {
+                delete transactionToSave[key];
+            }
+        });
+
         const newTransactionRef = doc(collection(db, CARD_TRANSACTIONS_COLLECTION));
-        batch.set(newTransactionRef, transactionData);
+        batch.set(newTransactionRef, transactionToSave);
         
         await batch.commit();
     },

@@ -1,3 +1,4 @@
+
 // src/app/recipes/page.tsx
 "use client";
 
@@ -65,8 +66,17 @@ export default function RecipesPage() {
   const recipeMutation = useMutation<void, Error, { recipe: BuiltProductRecipe; isEditing: boolean }>({
     mutationFn: async ({ recipe, isEditing }) => {
       if (!db) throw new Error("Firestore not available");
-      const recipeRef = doc(db, RECIPES_COLLECTION, recipe.id);
-      await setDoc(recipeRef, recipe, { merge: isEditing });
+      
+      const recipeToSave = { ...recipe };
+      Object.keys(recipeToSave).forEach(keyStr => {
+        const key = keyStr as keyof typeof recipeToSave;
+        if (recipeToSave[key] === undefined) {
+          delete recipeToSave[key];
+        }
+      });
+
+      const recipeRef = doc(db, RECIPES_COLLECTION, recipeToSave.id);
+      await setDoc(recipeRef, recipeToSave, { merge: isEditing });
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [RECIPES_COLLECTION] });

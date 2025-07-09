@@ -110,8 +110,17 @@ export default function CustomersPage() {
   const customerMutation = useMutation<void, Error, { customer: Customer; isNew: boolean }>({
     mutationFn: async ({ customer, isNew }) => {
       if (!db) throw new Error("Firestore not available");
-      const customerRef = doc(db, CUSTOMERS_COLLECTION, customer.id);
-      await setDoc(customerRef, customer, { merge: !isNew });
+      
+      const customerToSave = { ...customer };
+      Object.keys(customerToSave).forEach(keyStr => {
+        const key = keyStr as keyof typeof customerToSave;
+        if (customerToSave[key] === undefined) {
+          delete customerToSave[key];
+        }
+      });
+
+      const customerRef = doc(db, CUSTOMERS_COLLECTION, customerToSave.id);
+      await setDoc(customerRef, customerToSave, { merge: !isNew });
 
       if (isNew) {
         const newCardId = generateNewCardId();

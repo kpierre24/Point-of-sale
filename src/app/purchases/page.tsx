@@ -1,3 +1,4 @@
+
 // src/app/purchases/page.tsx
 "use client";
 
@@ -93,15 +94,24 @@ export default function PurchasesPage() {
   const purchaseOrderMutation = useMutation<void, Error, { orderData: PurchaseOrder; isEditing: boolean; originalOrder?: PurchaseOrder }>({
     mutationFn: async ({ orderData, isEditing, originalOrder }) => {
       if (!db) throw new Error("Firestore not available");
-      const poRef = doc(db, PURCHASE_ORDERS_COLLECTION, orderData.id);
-      await setDoc(poRef, orderData, { merge: isEditing });
+      
+      const orderToSave = { ...orderData };
+      Object.keys(orderToSave).forEach(keyStr => {
+        const key = keyStr as keyof typeof orderToSave;
+        if (orderToSave[key] === undefined) {
+          delete orderToSave[key];
+        }
+      });
+
+      const poRef = doc(db, PURCHASE_ORDERS_COLLECTION, orderToSave.id);
+      await setDoc(poRef, orderToSave, { merge: isEditing });
 
       // Stock update logic
       if (originalOrder && originalOrder.status === 'Received') {
         await updateProductStockMutation.mutateAsync({ orderForStockUpdate: originalOrder, isReverting: true });
       }
-      if (orderData.status === 'Received') {
-        await updateProductStockMutation.mutateAsync({ orderForStockUpdate: orderData, isReverting: false });
+      if (orderToSave.status === 'Received') {
+        await updateProductStockMutation.mutateAsync({ orderForStockUpdate: orderToSave, isReverting: false });
       }
     },
     onSuccess: (_, variables) => {

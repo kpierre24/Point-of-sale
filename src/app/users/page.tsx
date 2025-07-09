@@ -1,3 +1,4 @@
+
 // src/app/users/page.tsx
 "use client";
 
@@ -72,8 +73,18 @@ export default function UsersPage() {
         id: isEditing ? user.id : crypto.randomUUID(), // Use existing ID if editing, else new UUID
         pin: user.pin || Math.floor(100000 + Math.random() * 900000).toString(),
       };
-      const userRef = doc(db, USERS_COLLECTION, userToSave.id);
-      await setDoc(userRef, userToSave, { merge: isEditing });
+      
+      const finalUserObject = { ...userToSave };
+      Object.keys(finalUserObject).forEach(keyStr => {
+        const key = keyStr as keyof typeof finalUserObject;
+        if (finalUserObject[key] === undefined) {
+          delete finalUserObject[key];
+        }
+      });
+
+
+      const userRef = doc(db, USERS_COLLECTION, finalUserObject.id);
+      await setDoc(userRef, finalUserObject, { merge: isEditing });
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [USERS_COLLECTION] });

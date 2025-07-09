@@ -1,3 +1,4 @@
+
 // src/components/topup-cards/QRCodeScannerComponent.tsx
 "use client";
 
@@ -23,7 +24,10 @@ const QRCodeScannerComponent = ({ onScanSuccess, onScanFailure, active, setActiv
 
   useEffect(() => {
     if (!active || typeof window === 'undefined') {
-      stopScanner();
+      // Ensure scanner is stopped if it was active
+      if (html5QrCodeRef.current && html5QrCodeRef.current.getState() === Html5QrcodeScannerState.SCANNING) {
+        html5QrCodeRef.current.stop().catch(err => console.error("Error stopping QR scanner on inactive.", err));
+      }
       return;
     }
 
@@ -33,70 +37,51 @@ const QRCodeScannerComponent = ({ onScanSuccess, onScanFailure, active, setActiv
     const qrCode = html5QrCodeRef.current;
 
     const startScanner = async () => {
+      // Prevent starting if already scanning
+      if (qrCode.getState() === Html5QrcodeScannerState.SCANNING) return;
+
       try {
-        // Check for cameras
         const cameras = await Html5Qrcode.getCameras();
         if (!cameras || cameras.length === 0) {
-          toast({ variant: "destructive", title: "No Cameras Found", description: "Could not find any cameras on this device." });
-          setHasCameraPermission(false);
-          setActive(false);
-          return;
+          throw new Error("No cameras found on this device.");
         }
         
-        // Try to start scanning
-        // Configuration for the scanner
-        const config = {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-          aspectRatio: 1.0,
-        };
+        const config = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
         
         await qrCode.start(
-          { facingMode: "environment" }, // prefer back camera
+          { facingMode: "environment" },
           config,
           (decodedText, decodedResult) => {
             onScanSuccess(decodedText, decodedResult);
-            setActive(false); // Stop scanning on success
+            setActive(false);
           },
           (errorMessage) => {
             if (onScanFailure) onScanFailure(errorMessage);
-            // Errors like "QR code not found" are common, don't toast them unless persistent
           }
         );
         setHasCameraPermission(true);
       } catch (err: any) {
         console.error("QR Scanner Start Error:", err);
-        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        const errorMessage = typeof err === 'string' ? err : (err.message || 'An unknown error occurred.');
+
+        if (errorMessage.includes("NotAllowedError") || errorMessage.includes("PermissionDeniedError")) {
           toast({ variant: "destructive", title: "Camera Access Denied", description: "Please enable camera permissions in your browser." });
-          setHasCameraPermission(false);
-        } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
-           toast({ variant: "destructive", title: "Camera Not Found", description: "No suitable camera found on this device." });
-           setHasCameraPermission(false);
         } else {
-          toast({ variant: "destructive", title: "Scanner Error", description: `Could not start QR scanner: ${err.message || err}` });
-          setHasCameraPermission(false);
+          toast({ variant: "destructive", title: "Scanner Error", description: `Could not start QR scanner: ${errorMessage}` });
         }
+        setHasCameraPermission(false);
         setActive(false);
       }
     };
 
-    if (active) {
-      startScanner();
-    }
+    startScanner();
 
     return () => {
-      stopScanner();
+      if (qrCode && qrCode.getState() === Html5QrcodeScannerState.SCANNING) {
+        qrCode.stop().catch(err => console.error("Error stopping QR scanner on cleanup.", err));
+      }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]); // Only re-run if 'active' changes
-
-  const stopScanner = () => {
-    if (html5QrCodeRef.current && html5QrCodeRef.current.getState() === Html5QrcodeScannerState.SCANNING) {
-      html5QrCodeRef.current.stop().catch(err => {
-        console.error("Error stopping QR scanner:", err);
-      });
-    }
-  };
+  }, [active, onScanFailure, onScanSuccess, setActive, toast]);
 
   const toggleScanner = () => {
     setActive(!active);
@@ -109,14 +94,13 @@ const QRCodeScannerComponent = ({ onScanSuccess, onScanFailure, active, setActiv
         {active ? 'Stop QR Scanner' : 'Scan Card QR Code'}
       </Button>
 
-      {active && (
-        <div id={scannerRegionId} className="w-full border-2 border-dashed border-primary rounded-md overflow-hidden aspect-square max-w-sm mx-auto bg-muted">
-          {/* The library will render the video stream here */}
-           <div className="flex items-center justify-center h-full">
-            <ScanLine className="w-1/2 h-1/2 text-muted-foreground animate-pulse" />
-           </div>
-        </div>
-      )}
+      {/* The scanner div is always in the DOM but hidden, which is more stable for the library */}
+      <div 
+        id={scannerRegionId} 
+        className={`w-full border-2 border-dashed border-primary rounded-md overflow-hidden aspect-square max-w-sm mx-auto bg-muted ${!active ? 'hidden' : ''}`}
+      >
+        {/* The library will render the video stream here. */}
+      </div>
       
       {active && hasCameraPermission === false && (
         <Alert variant="destructive">
@@ -131,4 +115,3 @@ const QRCodeScannerComponent = ({ onScanSuccess, onScanFailure, active, setActiv
 };
 
 export default QRCodeScannerComponent;
-

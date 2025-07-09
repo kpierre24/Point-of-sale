@@ -51,9 +51,18 @@ const saveAppSettings = async (settings: AppSettings): Promise<AppSettings> => {
   if (isNaN(tax) || tax < 0 || tax > 100) {
     throw new Error('Tax rate must be a number between 0 and 100.');
   }
+  
+  const settingsToSave = { ...settings };
+  Object.keys(settingsToSave).forEach(keyStr => {
+    const key = keyStr as keyof typeof settingsToSave;
+    if (settingsToSave[key] === undefined) {
+      delete settingsToSave[key];
+    }
+  });
+
   const settingsDocRef = doc(db, 'appSettings', APP_SETTINGS_DOC_ID);
-  await setDoc(settingsDocRef, settings);
-  return settings;
+  await setDoc(settingsDocRef, settingsToSave);
+  return settingsToSave;
 };
 
 export default function SettingsPage() {

@@ -116,22 +116,30 @@ export default function SalesPage() {
       if (!db) throw new Error("Firestore not available");
       const batch = writeBatch(db);
 
-      const newSale: SoldProduct = {
+      const saleToSave: SoldProduct = {
         ...newSaleData,
         id: crypto.randomUUID(), // Still using client-generated ID for the sale itself
         timestamp: new Date().toISOString(),
       };
+      
+      Object.keys(saleToSave).forEach(keyStr => {
+        const key = keyStr as keyof typeof saleToSave;
+        if (saleToSave[key] === undefined) {
+          delete saleToSave[key];
+        }
+      });
+
 
       // Add sale document
-      const saleRef = doc(db, SALES_COLLECTION, newSale.id);
-      batch.set(saleRef, newSale);
+      const saleRef = doc(db, SALES_COLLECTION, saleToSave.id);
+      batch.set(saleRef, saleToSave);
 
       // Update product stock if productId is present
-      if (newSale.productId) {
-        const productRef = doc(db, PRODUCTS_COLLECTION, newSale.productId);
-        const product = products.find(p => p.id === newSale.productId);
+      if (saleToSave.productId) {
+        const productRef = doc(db, PRODUCTS_COLLECTION, saleToSave.productId);
+        const product = products.find(p => p.id === saleToSave.productId);
         if (product) {
-          const newStock = Math.max(0, product.stockQuantity - newSale.quantity);
+          const newStock = Math.max(0, product.stockQuantity - saleToSave.quantity);
           batch.update(productRef, { stockQuantity: newStock });
         }
       }
@@ -155,14 +163,14 @@ export default function SalesPage() {
             balanceBefore: paymentCardToUpdate.currentBalance,
             balanceAfter: newBalance,
             staffMember: 'Staff User', // Placeholder
-            notes: `Sale: ${newSale.name} x${newSale.quantity}`,
+            notes: `Sale: ${saleToSave.name} x${saleToSave.quantity}`,
         };
         const transactionRef = doc(collection(db, CARD_TRANSACTIONS_COLLECTION)); // Auto-generate ID
         batch.set(transactionRef, newTransaction);
       }
 
       await batch.commit();
-      return newSale; // Return newSale to pass to onSuccess
+      return saleToSave; // Return newSale to pass to onSuccess
     },
     onSuccess: (newSaleResult) => { 
       queryClient.invalidateQueries({ queryKey: [SALES_COLLECTION] });
@@ -342,4 +350,3 @@ export default function SalesPage() {
       </div>
   );
 }
-
