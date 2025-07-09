@@ -1,9 +1,8 @@
-
 // src/app/purchases/page.tsx
 "use client";
 
 import { useState, useEffect } from 'react';
-import type { PurchaseOrder, Product } from '@/types';
+import type { PurchaseOrder, Product, SoldProduct } from '@/types';
 import { Button } from '@/components/ui/button';
 import { PurchaseOrderForm } from '@/components/PurchaseOrderForm';
 import { PurchaseOrderTable } from '@/components/PurchaseOrderTable';
@@ -16,6 +15,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const PURCHASE_ORDERS_COLLECTION = 'purchaseOrders';
 const PRODUCTS_COLLECTION = 'products';
+const SALES_COLLECTION = 'sales';
 
 // Fetcher functions
 const fetchPurchaseOrders = async (): Promise<PurchaseOrder[]> => {
@@ -32,6 +32,13 @@ const fetchProducts = async (): Promise<Product[]> => {
   const productsCol = collection(db, PRODUCTS_COLLECTION);
   const snapshot = await getDocs(productsCol);
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+};
+
+const fetchSales = async (): Promise<SoldProduct[]> => {
+  if (!db) throw new Error("Firestore not available");
+  const salesCol = collection(db, SALES_COLLECTION);
+  const snapshot = await getDocs(salesCol);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SoldProduct));
 };
 
 
@@ -53,10 +60,17 @@ export default function PurchasesPage() {
     enabled: !!db,
   });
 
+  const { data: sales = [], isLoading: isLoadingSales, isError: isSalesError, error: salesError } = useQuery<SoldProduct[], Error>({
+    queryKey: [SALES_COLLECTION],
+    queryFn: fetchSales,
+    enabled: !!db,
+  });
+
   useEffect(() => {
     if (isPOsError) toast({ title: 'Error Loading Purchase Orders', description: posError?.message, variant: 'destructive' });
     if (isProductsError) toast({ title: 'Error Loading Products', description: productsError?.message, variant: 'destructive' });
-  }, [isPOsError, posError, isProductsError, productsError, toast]);
+    if (isSalesError) toast({ title: 'Error Loading Sales', description: salesError?.message, variant: 'destructive' });
+  }, [isPOsError, posError, isProductsError, productsError, isSalesError, salesError, toast]);
 
 
   const updateProductStockMutation = useMutation<void, Error, { orderForStockUpdate: PurchaseOrder; isReverting: boolean }>({
@@ -87,7 +101,7 @@ export default function PurchasesPage() {
       }
     },
     onError: (error) => {
-      toast({ title: 'Error Updating Stock', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error Updating Stock', description: error.message || 'An unknown error occurred.', variant: 'destructive' });
     }
   });
 
@@ -121,7 +135,7 @@ export default function PurchasesPage() {
       setPurchaseOrderToEdit(null);
     },
     onError: (error) => {
-      toast({ title: 'Error Saving Purchase Order', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error Saving Purchase Order', description: error.message || 'An unexpected error occurred.', variant: 'destructive' });
     },
   });
 
@@ -139,7 +153,7 @@ export default function PurchasesPage() {
       toast({ title: 'Purchase Order Deleted', description: 'The purchase order has been removed.', variant: 'destructive' });
     },
     onError: (error) => {
-      toast({ title: 'Error Deleting Purchase Order', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error Deleting Purchase Order', description: error.message || 'An unexpected error occurred.', variant: 'destructive' });
     },
   });
 
@@ -174,7 +188,7 @@ export default function PurchasesPage() {
     );
   }
 
-  if (isLoadingPOs || isLoadingProducts) {
+  if (isLoadingPOs || isLoadingProducts || isLoadingSales) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -207,6 +221,7 @@ export default function PurchasesPage() {
         onSave={handleSavePurchaseOrder}
         purchaseOrderToEdit={purchaseOrderToEdit}
         availableProducts={products}
+        allSales={sales}
       />
 
       <Card>

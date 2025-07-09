@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
-import type { PurchaseOrder, PurchaseOrderItem, Product } from '@/types';
+import type { PurchaseOrder, PurchaseOrderItem, Product, SoldProduct } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,8 +27,9 @@ import {
 import { DatePicker } from '@/components/ui/date-picker'; // Assuming you have this or will create it
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { PlusCircle, Trash2, XCircle } from 'lucide-react';
+import { PlusCircle, Trash2, XCircle, Wand2, Loader2, Info } from 'lucide-react';
 import { format } from 'date-fns';
+import { suggestPurchaseOrderItems, type SuggestPurchaseOrderItemsInput } from '@/ai/flows/suggest-purchase-order-items';
 
 interface PurchaseOrderFormProps {
   isOpen: boolean;
@@ -36,6 +37,7 @@ interface PurchaseOrderFormProps {
   onSave: (order: PurchaseOrder) => void;
   purchaseOrderToEdit?: PurchaseOrder | null;
   availableProducts: Product[];
+  allSales: SoldProduct[];
 }
 
 type FormLineItem = {
@@ -43,6 +45,7 @@ type FormLineItem = {
   productId: string;
   quantity: string; // Store as string for input, convert to number on save
   costPerItem: string; // Store as string for input, convert to number on save
+  suggestionReason?: string;
 };
 
 const defaultOrderBase: Omit<PurchaseOrder, 'id' | 'items' | 'grandTotal' | 'orderDate'> = {
@@ -57,12 +60,14 @@ export function PurchaseOrderForm({
   onSave,
   purchaseOrderToEdit,
   availableProducts,
+  allSales,
 }: PurchaseOrderFormProps) {
   const [supplierName, setSupplierName] = useState(defaultOrderBase.supplierName);
   const [orderDate, setOrderDate] = useState<Date | undefined>(new Date());
   const [status, setStatus] = useState<PurchaseOrder['status']>(defaultOrderBase.status);
   const [notes, setNotes] = useState(defaultOrderBase.notes);
   const [lineItems, setLineItems] = useState<FormLineItem[]>([]);
+  const [isSuggesting, setIsSuggesting] = useState(false);
   
   const { toast } = useToast();
 
@@ -82,6 +87,7 @@ export function PurchaseOrderForm({
           productId: item.productId,
           quantity: String(item.quantity),
           costPerItem: String(item.costPerItem),
+          suggestionReason: item.suggestionReason,
         }))
       );
     } else {
@@ -116,6 +122,50 @@ export function PurchaseOrderForm({
       return total + quantity * cost;
     }, 0);
   }, [lineItems]);
+  
+  const handleSuggestItems = async () => {
+    setIsSuggesting(true);
+    try {
+        const productInfo = availableProducts.map(p => ({
+            id: p.id,
+            name: p.name,
+            stockQuantity: p.stockQuantity,
+            costOfGoodsSold: p.costOfGoodsSold
+        }));
+        const salesInfo = allSales.map(s => ({
+            productId: s.productId || "unknown", // handle cases where productId might be missing
+            quantity: s.quantity,
+            timestamp: s.timestamp
+        })).filter(s => s.productId !== "unknown");
+
+        const input: SuggestPurchaseOrderItemsInput = {
+            products: productInfo,
+            salesHistory: salesInfo,
+        };
+        const result = await suggestPurchaseOrderItems(input);
+        
+        if (result.suggestedItems && result.suggestedItems.length > 0) {
+            const newItems: FormLineItem[] = result.suggestedItems.map(item => ({
+                tempId: crypto.randomUUID(),
+                productId: item.productId,
+                quantity: String(item.quantity),
+                costPerItem: String(item.costPerItem || getProductById(item.productId)?.costOfGoodsSold || 0),
+                suggestionReason: item.suggestionReason,
+            }));
+            setLineItems(newItems);
+            toast({ title: "AI Suggestions Added", description: `${newItems.length} items suggested for reorder.` });
+        } else {
+            toast({ title: "No Suggestions", description: "AI found no items that urgently need restocking." });
+        }
+
+    } catch (error) {
+        console.error("Error suggesting PO items:", error);
+        toast({ title: "Suggestion Error", description: "Could not get AI suggestions for purchase order.", variant: "destructive" });
+    } finally {
+        setIsSuggesting(false);
+    }
+  };
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -146,6 +196,7 @@ export function PurchaseOrderForm({
         quantity: quantity,
         costPerItem: costPerItem,
         totalCost: quantity * costPerItem,
+        suggestionReason: item.suggestionReason,
       };
     });
     
@@ -204,7 +255,17 @@ export function PurchaseOrderForm({
               </div>
               
               <div className="space-y-2 pt-4 border-t">
-                <h3 className="text-md font-semibold">Items</h3>
+                <div className="flex justify-between items-center">
+                    <h3 className="text-md font-semibold">Items</h3>
+                    <Button type="button" variant="ghost" size="sm" onClick={handleSuggestItems} disabled={isSuggesting}>
+                        {isSuggesting ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                            <Wand2 className="mr-2 h-4 w-4" />
+                        )}
+                        Suggest Items
+                    </Button>
+                </div>
                 {lineItems.map((item, index) => (
                   <Card key={item.tempId} className="p-4 space-y-3 relative">
                      <Button 
@@ -217,6 +278,14 @@ export function PurchaseOrderForm({
                         <XCircle className="h-4 w-4" />
                         <span className="sr-only">Remove Item</span>
                       </Button>
+                    
+                    {item.suggestionReason && (
+                        <div className="text-xs text-muted-foreground flex items-center bg-blue-50 dark:bg-blue-900/20 p-2 rounded-md">
+                           <Info className="h-4 w-4 mr-2 shrink-0 text-blue-500" />
+                           AI Suggestion: {item.suggestionReason}
+                        </div>
+                    )}
+
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div className="sm:col-span-2">
                         <Label htmlFor={`product-${item.tempId}`}>Product*</Label>
@@ -273,7 +342,7 @@ export function PurchaseOrderForm({
                   </Card>
                 ))}
                 <Button type="button" variant="outline" onClick={handleAddLineItem} className="w-full">
-                  <PlusCircle className="mr-2 h-4 w-4" /> Add Item
+                  <PlusCircle className="mr-2 h-4 w-4" /> Add Item Manually
                 </Button>
               </div>
 

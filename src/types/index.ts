@@ -27,6 +27,7 @@ export interface PurchaseOrderItem {
   quantity: number;
   costPerItem: number;
   totalCost: number; 
+  suggestionReason?: string; // AI Suggestion reason
 }
 
 export interface PurchaseOrder {
