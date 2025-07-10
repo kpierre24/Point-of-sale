@@ -13,12 +13,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCap
 import { CreateTopUpCardDialog } from '@/components/topup-cards/CreateTopUpCardDialog';
 import { ManageCardDialog } from '@/components/topup-cards/ManageCardDialog';
 import QRCodeScannerComponent from '@/components/topup-cards/QRCodeScannerComponent';
-import { PlusCircle, CreditCard, Search, Edit, Loader2 } from 'lucide-react';
+import { PlusCircle, CreditCard, Search, Edit, Loader2, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, setDoc, addDoc, writeBatch, query as firestoreQuery, orderBy, where, limit, serverTimestamp } from 'firebase/firestore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 
 
 const TOPUP_CARDS_COLLECTION = 'topUpCards';
@@ -63,6 +64,7 @@ export default function TopUpCardsPage() {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const { data: cards = [], isLoading: isLoadingCards, isError: isCardsError, error: cardsError } = useQuery<TopUpCard[], Error>({
     queryKey: [TOPUP_CARDS_COLLECTION],
@@ -92,9 +94,10 @@ export default function TopUpCardsPage() {
     mutationFn: async ({ cardData, initialTransactionData }) => {
       if (!db) throw new Error("Firestore not available");
       const batch = writeBatch(db);
-      const newCardRef = doc(collection(db, TOPUP_CARDS_COLLECTION)); // Auto-generate ID
       
       const cardToSave = { ...cardData };
+      const newCardRef = doc(collection(db, TOPUP_CARDS_COLLECTION));
+      
       Object.keys(cardToSave).forEach(keyStr => {
         const key = keyStr as keyof typeof cardToSave;
         if ((cardToSave as any)[key] === undefined) {
@@ -148,7 +151,7 @@ export default function TopUpCardsPage() {
         queryClient.invalidateQueries({ queryKey: [CARD_TRANSACTIONS_COLLECTION, variables.cardToUpdate.cardId] });
         if (selectedCard?.id === variables.cardToUpdate.id) {
             setSelectedCard(prev => prev ? {...prev, currentBalance: variables.newBalance, lastUpdatedAt: new Date().toISOString()} : null);
-            refetchSelectedCardTransactions(); // Refetch transactions for the dialog
+            refetchSelectedCardTransactions();
         }
         const action = variables.type === 'Top-Up' ? 'Top-Up' : 'Deduction';
         toast({ title: `${action} Successful`, description: `${formatCurrency(Math.abs(variables.transactionData.amount))} ${action === 'Top-Up' ? 'added to' : 'deducted from'} card ${variables.cardToUpdate.cardId}.` });
@@ -178,7 +181,6 @@ export default function TopUpCardsPage() {
   const handleManageCard = (cardToManage: TopUpCard) => {
     setSelectedCard(cardToManage);
     setIsManageDialogOpen(true);
-    // Transactions for selected card will be fetched by its own useQuery hook
   };
 
   const handleTopUp = useCallback((cardToUpdate: TopUpCard, amount: number, notes?: string) => {
@@ -229,7 +231,6 @@ export default function TopUpCardsPage() {
 
   const onScanSuccess = (decodedText: string) => {
     setIsScannerActive(false);
-    // Query Firestore directly for the scanned cardId instead of relying on potentially stale `cards` state
     const findCardByScannedId = async (scannedCardId: string) => {
         if (!db) {
             toast({ title: 'Error', description: 'Firestore not available.', variant: 'destructive'});
@@ -254,7 +255,6 @@ export default function TopUpCardsPage() {
         return;
     }
     const cardIdToSearch = manualCardIdInput.trim().toUpperCase();
-    // Query Firestore directly
      const findCardByManualId = async (idToSearch: string) => {
         if (!db) {
             toast({ title: 'Error', description: 'Firestore not available.', variant: 'destructive'});
@@ -308,10 +308,16 @@ export default function TopUpCardsPage() {
             Create, manage, and scan customer top-up cards. Data stored in Firestore.
           </p>
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)} disabled={isLoadingAnything}>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Create New Card
-        </Button>
+        <div className="flex items-center space-x-2">
+            <Button onClick={() => router.push('/topup-cards/bulk-create')} variant="outline" disabled={isLoadingAnything}>
+                <Users className="mr-2 h-4 w-4" />
+                Bulk Create Cards
+            </Button>
+            <Button onClick={() => setIsCreateDialogOpen(true)} disabled={isLoadingAnything}>
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Create New Card
+            </Button>
+        </div>
       </header>
 
       <CreateTopUpCardDialog
@@ -327,10 +333,10 @@ export default function TopUpCardsPage() {
           isOpen={isManageDialogOpen}
           onOpenChange={setIsManageDialogOpen}
           card={selectedCard}
-          transactions={selectedCardTransactions} // Pass the specific transactions for this card
+          transactions={selectedCardTransactions}
           onTopUp={handleTopUp}
           onDeduct={handleDeduct}
-          onRefreshCardData={() => selectedCard?.cardId && refetchSelectedCardTransactions()}
+          onRefreshCardData={() => refetchSelectedCardTransactions()}
         />
       )}
 

@@ -119,6 +119,30 @@ body {
     -webkit-print-color-adjust: exact !important; /* Chrome, Safari */
     color-adjust: exact !important; /* Firefox */
   }
+  .printable-area, .printable-area * {
+    visibility: visible;
+  }
+  .printable-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: auto;
+    margin: 0;
+    padding: 1rem;
+    border: none;
+    box-shadow: none;
+    background-color: white !important;
+    color: black !important;
+  }
+  .no-print, .no-print * {
+    display: none !important;
+  }
+  @page {
+    size: auto;
+    margin: 0.5in;
+  }
+
   .printable-receipt, .printable-receipt * {
     visibility: visible;
   }
@@ -146,9 +170,7 @@ body {
      margin: 0 auto; /* Center receipt on page */
      max-width: 300px; /* Typical receipt width */
   }
-  .no-print, .no-print * {
-    display: none !important;
-  }
+  
    /* Ensure dialog content doesn't inherit strange print styles */
   .printable-receipt .dialog-content-class { /* Replace with actual class if needed */
     overflow: visible !important; /* Ensure all content is visible */
