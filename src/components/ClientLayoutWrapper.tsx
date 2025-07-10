@@ -45,7 +45,7 @@ import {
   CreditCard,
   Loader2, 
   Database,
-  MapPin, // Added icon for Locations
+  MapPin,
 } from 'lucide-react';
 
 interface NavItem {
@@ -78,52 +78,36 @@ const APP_SETTINGS_DOC_ID = 'current';
 const LOCATIONS_COLLECTION = 'locations';
 const queryClient = new QueryClient(); 
 
-const useSelectedLocation = () => {
-    const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
-    const hasInitialized = useRef(false);
-
-    useEffect(() => {
-        if (!hasInitialized.current) {
-            const storedLocation = sessionStorage.getItem('selectedLocationId');
-            if (storedLocation) {
-                setSelectedLocation(storedLocation);
-            }
-            hasInitialized.current = true;
-        }
-    }, []);
-
-    const setLocation = (locationId: string | null) => {
-        if (locationId) {
-            sessionStorage.setItem('selectedLocationId', locationId);
-        } else {
-            sessionStorage.removeItem('selectedLocationId');
-        }
-        setSelectedLocation(locationId);
-    };
-
-    return [selectedLocation, setLocation] as const;
-};
-
 export function ClientLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [appTitle, setAppTitle] = useState(DEFAULT_APP_TITLE);
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
   const [locations, setLocations] = useState<Location[]>([]);
-  const [selectedLocation, setSelectedLocation] = useSelectedLocation();
+  const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
   const { toast } = useToast();
   
-  const locationsFetchedRef = useRef(false);
+  const hasInitialized = useRef(false);
 
   useEffect(() => {
+    // This effect should only run once on initial mount
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
+
+    // 1. Get initial location from session storage
+    const storedLocation = sessionStorage.getItem('selectedLocationId');
+    if (storedLocation) {
+        setSelectedLocation(storedLocation);
+    }
+    
     if (!db) {
       console.warn("Firestore not available. Using default settings.");
       setIsSettingsLoading(false);
       return;
     }
 
+    // 2. Fetch App Settings
     setIsSettingsLoading(true);
     const settingsDocRef = doc(db, 'appSettings', APP_SETTINGS_DOC_ID);
-    
     const unsubscribeSettings = onSnapshot(settingsDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const loadedSettings = docSnap.data() as AppSettings;
@@ -148,6 +132,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
       setIsSettingsLoading(false);
     });
 
+    // 3. Fetch Locations and set a default if none is selected
     const fetchLocations = async () => {
         try {
             const locationsColRef = collection(db, LOCATIONS_COLLECTION);
@@ -155,8 +140,11 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
             const fetchedLocations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location));
             setLocations(fetchedLocations);
 
-            if (fetchedLocations.length > 0 && !sessionStorage.getItem('selectedLocationId')) {
-                setSelectedLocation(fetchedLocations[0].id);
+            // Set default location only if none is already stored/set and there are locations available
+            if (!sessionStorage.getItem('selectedLocationId') && fetchedLocations.length > 0) {
+                const defaultLocationId = fetchedLocations[0].id;
+                sessionStorage.setItem('selectedLocationId', defaultLocationId);
+                setSelectedLocation(defaultLocationId);
             }
         } catch (error) {
             console.error("Error fetching locations:", error);
@@ -167,14 +155,15 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
             });
         }
     };
-
-    if (!locationsFetchedRef.current) {
-        fetchLocations();
-        locationsFetchedRef.current = true;
-    }
+    fetchLocations();
 
     return () => unsubscribeSettings(); 
-  }, [toast, setSelectedLocation]);
+  }, [toast]); // Dependencies are minimal to prevent re-running.
+
+  const handleLocationChange = (locationId: string) => {
+      sessionStorage.setItem('selectedLocationId', locationId);
+      setSelectedLocation(locationId);
+  };
 
   const LocationSelector = () => (
     <div className="space-y-1 p-2">
@@ -183,7 +172,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
         </Label>
         <Select
             value={selectedLocation || undefined}
-            onValueChange={(value) => setSelectedLocation(value)}
+            onValueChange={handleLocationChange}
             disabled={locations.length === 0}
         >
             <SelectTrigger className="group-data-[collapsible=icon]:hidden">
@@ -195,7 +184,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
                         <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
                     ))
                 ) : (
-                    <SelectItem value="no-locations-placeholder" disabled>No locations found</SelectItem>
+                    <SelectItem value="no-locations" disabled>No locations found</SelectItem>
                 )}
             </SelectContent>
         </Select>
