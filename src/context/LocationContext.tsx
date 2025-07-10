@@ -11,20 +11,30 @@ interface LocationContextType {
 const LocationContext = createContext<LocationContextType | undefined>(undefined);
 
 export function LocationProvider({ children }: { children: ReactNode }) {
-  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(() => {
-    if (typeof window !== 'undefined') {
-      return sessionStorage.getItem('selectedLocationId');
-    }
-    return null;
-  });
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    if (selectedLocationId) {
-      sessionStorage.setItem('selectedLocationId', selectedLocationId);
-    } else {
-      sessionStorage.removeItem('selectedLocationId');
+    // This effect runs only on the client, after the initial render.
+    // This prevents a mismatch between server and client HTML.
+    const storedLocationId = sessionStorage.getItem('selectedLocationId');
+    if (storedLocationId) {
+      setSelectedLocationId(storedLocationId);
     }
-  }, [selectedLocationId]);
+    setIsInitialized(true);
+  }, []);
+
+  useEffect(() => {
+    // This effect saves the location ID to sessionStorage whenever it changes,
+    // but only after the initial state has been loaded from storage.
+    if (isInitialized) {
+        if (selectedLocationId) {
+          sessionStorage.setItem('selectedLocationId', selectedLocationId);
+        } else {
+          sessionStorage.removeItem('selectedLocationId');
+        }
+    }
+  }, [selectedLocationId, isInitialized]);
 
   return (
     <LocationContext.Provider value={{ selectedLocationId, setSelectedLocationId }}>
