@@ -63,7 +63,7 @@ const navItems: NavItem[] = [
   { href: '/purchases', icon: Truck, label: 'Purchases', tooltip: 'Manage Stock Purchases' },
   { href: '/customers', icon: Users, label: 'Customers', tooltip: 'Manage Customers' },
   { href: '/topup-cards', icon: CreditCard, label: 'Top-Up Cards', tooltip: 'Manage Customer Top-Up Cards' },
-  { href: '/reports', icon: FileText, label: 'View Business Reports' },
+  { href: '/reports', icon: FileText, label: 'Reports', tooltip: 'View Business Reports' },
   { href: '/users', icon: UserCog, label: 'Staff', tooltip: 'Manage Staff Users' },
 ];
 
@@ -274,7 +274,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
               </Link>
           </header>
           <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/40 min-h-[calc(100vh-3.5rem)] md:min-h-screen">
-              {React.cloneElement(children as React.ReactElement, { selectedLocationId: selectedLocation })}
+            {React.isValidElement(children) ? React.cloneElement(children as React.ReactElement, { selectedLocationId: selectedLocation }) : children}
           </div>
         </SidebarInset>
       </SidebarProvider>
