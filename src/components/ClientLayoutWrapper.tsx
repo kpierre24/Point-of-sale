@@ -28,7 +28,7 @@ import { Label } from "@/components/ui/label";
 import { APP_TITLE as DEFAULT_APP_TITLE } from '@/config/constants';
 import type { AppSettings, Location } from '@/types';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, onSnapshot, collection, getDocs } from 'firebase/firestore';
+import { doc, onSnapshot, collection, getDocs } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import {
   LayoutDashboard,
@@ -63,7 +63,7 @@ const navItems: NavItem[] = [
   { href: '/purchases', icon: Truck, label: 'Purchases', tooltip: 'Manage Stock Purchases' },
   { href: '/customers', icon: Users, label: 'Customers', tooltip: 'Manage Customers' },
   { href: '/topup-cards', icon: CreditCard, label: 'Top-Up Cards', tooltip: 'Manage Customer Top-Up Cards' },
-  { href: '/reports', icon: FileText, label: 'Reports', tooltip: 'View Business Reports' },
+  { href: '/reports', icon: FileText, label: 'View Business Reports' },
   { href: '/users', icon: UserCog, label: 'Staff', tooltip: 'Manage Staff Users' },
 ];
 
@@ -185,9 +185,10 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
     </div>
 );
 
-  const isAppPage = (children as React.ReactElement)?.props?.isAppPage;
+  const isSplashPage = pathname === '/';
 
-  if (!isAppPage) {
+  // If it's the splash page, render children directly without the main layout
+  if (isSplashPage) {
     return (
         <QueryClientProvider client={queryClient}>
             {children}
@@ -195,6 +196,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
     );
   }
 
+  // Render the full application layout with sidebar
   return (
     <QueryClientProvider client={queryClient}>
       <SidebarProvider defaultOpen>

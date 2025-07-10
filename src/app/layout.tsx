@@ -17,24 +17,12 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Check if the page is the splash page by looking for a prop passed up
-  // from ClientLayoutWrapper. This is more robust than checking the segment name.
-  if ((children as React.ReactElement)?.props?.childProp?.segment === '__PAGE__') {
-     return (
-        <html lang="en" className={`${GeistSans.variable}`}>
-            <body className="font-sans antialiased">
-                {children}
-                <Toaster />
-            </body>
-        </html>
-     );
-  }
-
+  // The logic to differentiate splash page vs app pages is now handled inside ClientLayoutWrapper
   return (
     <html lang="en" className={`${GeistSans.variable}`}>
       <body className={`font-sans antialiased`}>
         <ClientLayoutWrapper>
-          {React.cloneElement(children as React.ReactElement, { selectedLocationId: null, isAppPage: true })}
+          {children}
         </ClientLayoutWrapper>
         <Toaster />
       </body>
