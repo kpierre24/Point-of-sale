@@ -89,11 +89,9 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
   const hasInitialized = useRef(false);
 
   useEffect(() => {
-    // This effect should only run once on initial mount
     if (hasInitialized.current) return;
     hasInitialized.current = true;
 
-    // 1. Get initial location from session storage
     const storedLocation = sessionStorage.getItem('selectedLocationId');
     if (storedLocation) {
         setSelectedLocation(storedLocation);
@@ -105,7 +103,6 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
       return;
     }
 
-    // 2. Fetch App Settings
     setIsSettingsLoading(true);
     const settingsDocRef = doc(db, 'appSettings', APP_SETTINGS_DOC_ID);
     const unsubscribeSettings = onSnapshot(settingsDocRef, (docSnap) => {
@@ -132,7 +129,6 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
       setIsSettingsLoading(false);
     });
 
-    // 3. Fetch Locations and set a default if none is selected
     const fetchLocations = async () => {
         try {
             const locationsColRef = collection(db, LOCATIONS_COLLECTION);
@@ -140,7 +136,6 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
             const fetchedLocations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location));
             setLocations(fetchedLocations);
 
-            // Set default location only if none is already stored/set and there are locations available
             if (!sessionStorage.getItem('selectedLocationId') && fetchedLocations.length > 0) {
                 const defaultLocationId = fetchedLocations[0].id;
                 sessionStorage.setItem('selectedLocationId', defaultLocationId);
@@ -158,7 +153,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
     fetchLocations();
 
     return () => unsubscribeSettings(); 
-  }, [toast]); // Dependencies are minimal to prevent re-running.
+  }, [toast]);
 
   const handleLocationChange = (locationId: string) => {
       sessionStorage.setItem('selectedLocationId', locationId);
