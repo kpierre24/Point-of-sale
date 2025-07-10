@@ -11,7 +11,7 @@ import { TAX_RATE as DEFAULT_TAX_RATE, PAYMENT_METHODS } from "@/config/constant
 import { suggestProductDetails, type SuggestProductDetailsInput } from '@/ai/flows/suggest-product-details';
 import { Lightbulb, PlusSquare, Loader2, PackageSearch, ScanLine, CreditCard, CheckCircle, XCircle, Percent, MinusCircle, Tag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Tooltip, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
