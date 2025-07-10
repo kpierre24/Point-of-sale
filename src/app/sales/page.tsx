@@ -1,7 +1,7 @@
 // src/app/sales/page.tsx
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { SoldProduct, Product, TopUpCard, CardTransaction, AppSettings, Location } from "@/types"; 
 import { SaleForm } from "@/components/SaleForm";
 import { SalesHistoryTable } from "@/components/SalesHistoryTable";
