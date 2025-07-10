@@ -1,4 +1,3 @@
-
 // src/components/ClientLayoutWrapper.tsx
 "use client";
 
@@ -179,7 +178,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
                         <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
                     ))
                 ) : (
-                    <SelectItem value="no-locations" disabled>No locations found</SelectItem>
+                    <SelectItem value="no-locations-placeholder" disabled>No locations found</SelectItem>
                 )}
             </SelectContent>
         </Select>
