@@ -1,4 +1,3 @@
-
 // src/app/products/page.tsx
 "use client";
 
@@ -38,6 +37,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const PRODUCTS_COLLECTION = 'products';
 const RECIPES_COLLECTION = 'recipes';
+const LOCATIONS_COLLECTION = 'locations';
 
 const escapeCsvField = (field: any): string => {
   if (field === null || field === undefined) {
@@ -67,7 +67,13 @@ const fetchRecipes = async (): Promise<BuiltProductRecipe[]> => {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BuiltProductRecipe));
 };
 
-export default function ProductsPage() {
+const fetchLocations = async () => {
+    if (!db) throw new Error("Firestore not available");
+    const snapshot = await getDocs(collection(db, LOCATIONS_COLLECTION));
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+};
+
+export default function ProductsPage({ selectedLocationId }: { selectedLocationId: string | null }) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
   const { toast } = useToast();
@@ -86,6 +92,12 @@ export default function ProductsPage() {
     enabled: !!db,
     retry: false,
   });
+
+  const { data: locations = [], isLoading: isLoadingLocations, isError: isLocationsError, error: locationsError } = useQuery({
+    queryKey: [LOCATIONS_COLLECTION],
+    queryFn: fetchLocations,
+    enabled: !!db,
+  });
   
   useEffect(() => {
     if (isProductsError && productsError) {
@@ -94,23 +106,26 @@ export default function ProductsPage() {
     if (isRecipesError && recipesError) {
       toast({ title: 'Error Loading Recipes', description: recipesError?.message || 'Could not fetch recipes.', variant: 'destructive' });
     }
-  }, [isProductsError, productsError, isRecipesError, recipesError, toast]);
+    if (isLocationsError && locationsError) {
+        toast({ title: 'Error Loading Locations', description: (locationsError as Error)?.message || 'Could not fetch locations.', variant: 'destructive' });
+    }
+  }, [isProductsError, productsError, isRecipesError, recipesError, isLocationsError, locationsError, toast]);
 
 
   const productMutation = useMutation<void, Error, { product: Product; isEditing: boolean }>({
     mutationFn: async ({ product, isEditing }) => {
       if (!db) throw new Error("Firestore not available");
 
-      const productToSave = { ...product };
-      // Firestore does not allow `undefined` values. This loop removes any keys
-      // with an undefined value before attempting to save the document.
+      const productToSave: Partial<Product> = { ...product };
+      delete (productToSave as any).stockQuantity; // Remove obsolete field if it exists
+      
       Object.keys(productToSave).forEach(key => {
         if (productToSave[key as keyof Product] === undefined) {
           delete productToSave[key as keyof Product];
         }
       });
 
-      const productRef = doc(db, PRODUCTS_COLLECTION, productToSave.id);
+      const productRef = doc(db, PRODUCTS_COLLECTION, productToSave.id!);
       await setDoc(productRef, productToSave, { merge: isEditing }); 
     },
     onSuccess: (_, variables) => {
@@ -167,13 +182,14 @@ export default function ProductsPage() {
       toast({ title: "No Data", description: "There are no products to export.", variant: "destructive" });
       return;
     }
-    const headers = ["ID", "Name", "Description", "Price", "Cost of Goods Sold", "Stock Quantity", "Category", "Image URL", "Recipe ID"];
+    const headers = ["ID", "Name", "Description", "Price", "Cost of Goods Sold", "Category", "Image URL", "Recipe ID", ...locations.map(l => `Stock: ${l.name}`)];
     const csvRows = [
       headers.join(','),
       ...products.map(product => [
         escapeCsvField(product.id), escapeCsvField(product.name), escapeCsvField(product.description),
-        escapeCsvField(product.price), escapeCsvField(product.costOfGoodsSold), escapeCsvField(product.stockQuantity),
+        escapeCsvField(product.price), escapeCsvField(product.costOfGoodsSold),
         escapeCsvField(product.category), escapeCsvField(product.imageUrl), escapeCsvField(product.recipeId),
+        ...locations.map(l => escapeCsvField(product.stockByLocation?.[l.id] || 0))
       ].join(','))
     ];
     const csvString = csvRows.join('\n');
@@ -201,7 +217,7 @@ export default function ProductsPage() {
     );
   }
 
-  if (isLoadingProducts || isLoadingRecipes) {
+  if (isLoadingProducts || isLoadingRecipes || isLoadingLocations) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -210,36 +226,15 @@ export default function ProductsPage() {
     );
   }
 
-  if (isProductsError || isRecipesError) {
-    const combinedError = productsError?.message || recipesError?.message || "An error occurred loading product data.";
-    return (
-      <div className="space-y-8">
-        <header className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Product Management</h1>
-          </div>
-           <div className="flex items-center space-x-2">
-             <Button onClick={handleExportProducts} variant="outline" disabled={true}>
-                <Download className="mr-2 h-4 w-4" />
-                Export Products
-            </Button>
-            <Button onClick={handleAddNewProduct} disabled={true}>
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Add Product
-            </Button>
-           </div>
-        </header>
-        <Alert variant="destructive">
-          <WifiOff className="h-5 w-5" />
-          <AlertTitle>Failed to Load Product Data</AlertTitle>
-          <AlertDescription>
-            Could not connect to the database to load products or recipes. Please check your internet connection and Firebase configuration.
-            <p className="mt-2 text-xs">Error: {combinedError}</p>
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
+  const getStockForDisplay = (product: Product) => {
+      if (selectedLocationId) {
+          return product.stockByLocation?.[selectedLocationId] ?? 0;
+      }
+      return Object.values(product.stockByLocation || {}).reduce((sum, current) => sum + current, 0);
+  };
+
+  const displayLocationName = selectedLocationId ? locations.find(l => l.id === selectedLocationId)?.name : 'All Locations';
+
 
   return (
     <div className="space-y-8">
@@ -268,13 +263,14 @@ export default function ProductsPage() {
         onSave={handleSaveProduct}
         productToEdit={productToEdit}
         availableRecipes={availableRecipes || []}
+        locations={locations}
       />
 
       <Card>
         <CardHeader>
           <CardTitle>Product List</CardTitle>
           <CardDescription>
-            {products.length > 0 ? `You have ${products.length} product(s) in your inventory.` : 'No products found. Add a new product to get started.'}
+            {`Displaying stock for: ${displayLocationName}. You have ${products.length} total product(s).`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -288,7 +284,7 @@ export default function ProductsPage() {
                   <TableHead>Category</TableHead>
                   <TableHead className="text-right">Cost Price</TableHead>
                   <TableHead className="text-right">Selling Price</TableHead>
-                  <TableHead className="text-right">Stock</TableHead>
+                  <TableHead className="text-right">{selectedLocationId ? 'Stock' : 'Total Stock'}</TableHead>
                   <TableHead className="text-center w-[120px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -315,7 +311,7 @@ export default function ProductsPage() {
                     <TableCell>{product.category || 'N/A'}</TableCell>
                     <TableCell className="text-right">{formatCurrency(product.costOfGoodsSold)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(product.price)}</TableCell>
-                    <TableCell className="text-right">{product.stockQuantity}</TableCell>
+                    <TableCell className="text-right">{getStockForDisplay(product)}</TableCell>
                     <TableCell className="text-center">
                       <div className="flex justify-center items-center space-x-2">
                         <Button variant="outline" size="icon" onClick={() => handleEditProduct(product)} disabled={productMutation.isPending || deleteProductMutation.isPending}>

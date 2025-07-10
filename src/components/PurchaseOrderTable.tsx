@@ -1,8 +1,7 @@
-
 // src/components/PurchaseOrderTable.tsx
 "use client";
 
-import type { PurchaseOrder } from '@/types';
+import type { PurchaseOrder, Location } from '@/types';
 import {
   Table,
   TableHeader,
@@ -33,10 +32,11 @@ interface PurchaseOrderTableProps {
   purchaseOrders: PurchaseOrder[];
   onEdit: (order: PurchaseOrder) => void;
   onDelete: (orderId: string) => void;
-  isLoading?: boolean; // Added isLoading prop
+  isLoading?: boolean;
+  locations: Location[];
 }
 
-export function PurchaseOrderTable({ purchaseOrders, onEdit, onDelete, isLoading = false }: PurchaseOrderTableProps) {
+export function PurchaseOrderTable({ purchaseOrders, onEdit, onDelete, isLoading = false, locations }: PurchaseOrderTableProps) {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
@@ -64,6 +64,10 @@ export function PurchaseOrderTable({ purchaseOrders, onEdit, onDelete, isLoading
     }
   };
 
+  const getLocationName = (locationId: string) => {
+      return locations.find(l => l.id === locationId)?.name || 'Unknown';
+  };
+
 
   return (
     <ScrollArea className="h-[500px] rounded-md border shadow-inner">
@@ -73,6 +77,7 @@ export function PurchaseOrderTable({ purchaseOrders, onEdit, onDelete, isLoading
           <TableRow>
             <TableHead className="w-[120px]">Order ID</TableHead>
             <TableHead>Supplier</TableHead>
+            <TableHead>Location</TableHead>
             <TableHead>Order Date</TableHead>
             <TableHead>Received Date</TableHead>
             <TableHead className="text-center">Status</TableHead>
@@ -88,6 +93,7 @@ export function PurchaseOrderTable({ purchaseOrders, onEdit, onDelete, isLoading
                 {order.id.substring(0, 8)}...
               </TableCell>
               <TableCell className="font-medium">{order.supplierName}</TableCell>
+              <TableCell>{getLocationName(order.locationId)}</TableCell>
               <TableCell>{formatDate(order.orderDate)}</TableCell>
               <TableCell>{formatDate(order.receivedDate)}</TableCell>
               <TableCell className="text-center">

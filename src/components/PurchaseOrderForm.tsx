@@ -2,12 +2,12 @@
 "use client";
 
 import { useState, useEffect, useMemo } from 'react';
-import type { PurchaseOrder, PurchaseOrderItem, Product, SoldProduct } from '@/types';
+import type { PurchaseOrder, PurchaseOrderItem, Product, SoldProduct, Location } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Card } from '@/components/ui/card'; // Added import for Card
+import { Card } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DatePicker } from '@/components/ui/date-picker'; // Assuming you have this or will create it
+import { DatePicker } from '@/components/ui/date-picker';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { PlusCircle, Trash2, XCircle, Wand2, Loader2, Info } from 'lucide-react';
@@ -38,17 +38,19 @@ interface PurchaseOrderFormProps {
   purchaseOrderToEdit?: PurchaseOrder | null;
   availableProducts: Product[];
   allSales: SoldProduct[];
+  locations: Location[];
+  selectedLocationId: string | null;
 }
 
 type FormLineItem = {
-  tempId: string; // For React key
+  tempId: string;
   productId: string;
-  quantity: string; // Store as string for input, convert to number on save
-  costPerItem: string; // Store as string for input, convert to number on save
+  quantity: string;
+  costPerItem: string;
   suggestionReason?: string;
 };
 
-const defaultOrderBase: Omit<PurchaseOrder, 'id' | 'items' | 'grandTotal' | 'orderDate'> = {
+const defaultOrderBase: Omit<PurchaseOrder, 'id' | 'items' | 'grandTotal' | 'orderDate' | 'locationId'> = {
   supplierName: '',
   status: 'Pending',
   notes: '',
@@ -61,12 +63,15 @@ export function PurchaseOrderForm({
   purchaseOrderToEdit,
   availableProducts,
   allSales,
+  locations,
+  selectedLocationId
 }: PurchaseOrderFormProps) {
   const [supplierName, setSupplierName] = useState(defaultOrderBase.supplierName);
   const [orderDate, setOrderDate] = useState<Date | undefined>(new Date());
   const [status, setStatus] = useState<PurchaseOrder['status']>(defaultOrderBase.status);
   const [notes, setNotes] = useState(defaultOrderBase.notes);
   const [lineItems, setLineItems] = useState<FormLineItem[]>([]);
+  const [locationId, setLocationId] = useState<string>('');
   const [isSuggesting, setIsSuggesting] = useState(false);
   
   const { toast } = useToast();
@@ -81,9 +86,10 @@ export function PurchaseOrderForm({
       setOrderDate(new Date(purchaseOrderToEdit.orderDate));
       setStatus(purchaseOrderToEdit.status);
       setNotes(purchaseOrderToEdit.notes || '');
+      setLocationId(purchaseOrderToEdit.locationId);
       setLineItems(
         purchaseOrderToEdit.items.map(item => ({
-          tempId: item.id || crypto.randomUUID(), // Use item.id if it exists, or generate one
+          tempId: item.id || crypto.randomUUID(),
           productId: item.productId,
           quantity: String(item.quantity),
           costPerItem: String(item.costPerItem),
@@ -96,8 +102,9 @@ export function PurchaseOrderForm({
       setStatus(defaultOrderBase.status);
       setNotes(defaultOrderBase.notes);
       setLineItems([]);
+      setLocationId(selectedLocationId || '');
     }
-  }, [purchaseOrderToEdit, isOpen]);
+  }, [purchaseOrderToEdit, isOpen, selectedLocationId]);
 
   const handleAddLineItem = () => {
     setLineItems([...lineItems, { tempId: crypto.randomUUID(), productId: '', quantity: '1', costPerItem: '0' }]);
@@ -129,11 +136,11 @@ export function PurchaseOrderForm({
         const productInfo = availableProducts.map(p => ({
             id: p.id,
             name: p.name,
-            stockQuantity: p.stockQuantity,
+            stockQuantity: p.stockByLocation[locationId] ?? 0,
             costOfGoodsSold: p.costOfGoodsSold
         }));
-        const salesInfo = allSales.map(s => ({
-            productId: s.productId || "unknown", // handle cases where productId might be missing
+        const salesInfo = allSales.filter(s => s.locationId === locationId).map(s => ({
+            productId: s.productId || "unknown",
             quantity: s.quantity,
             timestamp: s.timestamp
         })).filter(s => s.productId !== "unknown");
@@ -155,7 +162,7 @@ export function PurchaseOrderForm({
             setLineItems(newItems);
             toast({ title: "AI Suggestions Added", description: `${newItems.length} items suggested for reorder.` });
         } else {
-            toast({ title: "No Suggestions", description: "AI found no items that urgently need restocking." });
+            toast({ title: "No Suggestions", description: "AI found no items that urgently need restocking for this location." });
         }
 
     } catch (error) {
@@ -169,8 +176,8 @@ export function PurchaseOrderForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supplierName.trim()) {
-      toast({ title: 'Supplier Name Required', description: 'Please enter a supplier name.', variant: 'destructive' });
+    if (!supplierName.trim() || !locationId) {
+      toast({ title: 'Required Fields Missing', description: 'Please enter a supplier name and select a location.', variant: 'destructive' });
       return;
     }
     if (!orderDate) {
@@ -182,33 +189,34 @@ export function PurchaseOrderForm({
       return;
     }
 
-    const processedItems: PurchaseOrderItem[] = lineItems.map(item => {
-      const product = getProductById(item.productId);
-      const quantity = parseFloat(item.quantity);
-      const costPerItem = parseFloat(item.costPerItem);
-      if (!product || isNaN(quantity) || quantity <= 0 || isNaN(costPerItem) || costPerItem < 0) {
-        throw new Error(`Invalid data for item: ${product?.name || 'Unknown Product'}. Please check quantity and cost.`);
-      }
-      return {
-        id: item.tempId, // Or a new UUID if items don't have persistent IDs across edits
-        productId: item.productId,
-        productName: product.name,
-        quantity: quantity,
-        costPerItem: costPerItem,
-        totalCost: quantity * costPerItem,
-        suggestionReason: item.suggestionReason,
-      };
-    });
-    
     try {
+      const processedItems: PurchaseOrderItem[] = lineItems.map(item => {
+        const product = getProductById(item.productId);
+        const quantity = parseFloat(item.quantity);
+        const costPerItem = parseFloat(item.costPerItem);
+        if (!product || isNaN(quantity) || quantity <= 0 || isNaN(costPerItem) || costPerItem < 0) {
+          throw new Error(`Invalid data for item: ${product?.name || 'Unknown Product'}. Please check quantity and cost.`);
+        }
+        return {
+          id: item.tempId,
+          productId: item.productId,
+          productName: product.name,
+          quantity: quantity,
+          costPerItem: costPerItem,
+          totalCost: quantity * costPerItem,
+          suggestionReason: item.suggestionReason,
+        };
+      });
+
       const finalOrder: PurchaseOrder = {
         id: purchaseOrderToEdit?.id || crypto.randomUUID(),
         supplierName,
-        orderDate: format(orderDate, 'yyyy-MM-dd'), // Store as ISO string date part
+        orderDate: format(orderDate, 'yyyy-MM-dd'),
         status,
         notes: notes || undefined,
         items: processedItems,
         grandTotal,
+        locationId,
         receivedDate: status === 'Received' ? (purchaseOrderToEdit?.receivedDate || format(new Date(), 'yyyy-MM-dd')) : undefined,
       };
       onSave(finalOrder);
@@ -240,24 +248,39 @@ export function PurchaseOrderForm({
                   <DatePicker date={orderDate} setDate={setOrderDate} />
                 </div>
               </div>
-              <div>
-                <Label htmlFor="status">Status*</Label>
-                <Select value={status} onValueChange={(value: PurchaseOrder['status']) => setStatus(value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Pending">Pending</SelectItem>
-                    <SelectItem value="Received">Received</SelectItem>
-                    <SelectItem value="Cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <Label htmlFor="location">Location*</Label>
+                    <Select value={locationId} onValueChange={setLocationId} required>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Select location" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {locations.map(loc => (
+                                <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div>
+                    <Label htmlFor="status">Status*</Label>
+                    <Select value={status} onValueChange={(value: PurchaseOrder['status']) => setStatus(value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Pending">Pending</SelectItem>
+                        <SelectItem value="Received">Received</SelectItem>
+                        <SelectItem value="Cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                </div>
               </div>
               
               <div className="space-y-2 pt-4 border-t">
                 <div className="flex justify-between items-center">
                     <h3 className="text-md font-semibold">Items</h3>
-                    <Button type="button" variant="ghost" size="sm" onClick={handleSuggestItems} disabled={isSuggesting}>
+                    <Button type="button" variant="ghost" size="sm" onClick={handleSuggestItems} disabled={isSuggesting || !locationId}>
                         {isSuggesting ? (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         ) : (
@@ -299,7 +322,7 @@ export function PurchaseOrderForm({
                           <SelectContent>
                             {availableProducts.map(p => (
                               <SelectItem key={p.id} value={p.id}>
-                                {p.name} (Stock: {p.stockQuantity})
+                                {p.name} (Stock: {p.stockByLocation[locationId] ?? 0})
                               </SelectItem>
                             ))}
                           </SelectContent>

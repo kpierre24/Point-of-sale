@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import type { PurchaseOrder, Product, SoldProduct } from '@/types';
+import type { PurchaseOrder, Product, SoldProduct, Location } from '@/types';
 import { Button } from '@/components/ui/button';
 import { PurchaseOrderForm } from '@/components/PurchaseOrderForm';
 import { PurchaseOrderTable } from '@/components/PurchaseOrderTable';
@@ -16,12 +16,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 const PURCHASE_ORDERS_COLLECTION = 'purchaseOrders';
 const PRODUCTS_COLLECTION = 'products';
 const SALES_COLLECTION = 'sales';
+const LOCATIONS_COLLECTION = 'locations';
 
 // Fetcher functions
 const fetchPurchaseOrders = async (): Promise<PurchaseOrder[]> => {
   if (!db) throw new Error("Firestore not available");
   const poCol = collection(db, PURCHASE_ORDERS_COLLECTION);
-  // Example: Order by orderDate descending
   const q = firestoreQuery(poCol, orderBy("orderDate", "desc"));
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PurchaseOrder));
@@ -41,8 +41,14 @@ const fetchSales = async (): Promise<SoldProduct[]> => {
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SoldProduct));
 };
 
+const fetchLocations = async (): Promise<Location[]> => {
+    if (!db) throw new Error("Firestore not available");
+    const snapshot = await getDocs(collection(db, LOCATIONS_COLLECTION));
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location));
+};
 
-export default function PurchasesPage() {
+
+export default function PurchasesPage({ selectedLocationId }: { selectedLocationId: string | null }) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [purchaseOrderToEdit, setPurchaseOrderToEdit] = useState<PurchaseOrder | null>(null);
   const { toast } = useToast();
@@ -65,29 +71,39 @@ export default function PurchasesPage() {
     queryFn: fetchSales,
     enabled: !!db,
   });
+  
+  const { data: locations = [], isLoading: isLoadingLocations, isError: isLocationsError, error: locationsError } = useQuery<Location[], Error>({
+    queryKey: [LOCATIONS_COLLECTION],
+    queryFn: fetchLocations,
+    enabled: !!db,
+  });
 
   useEffect(() => {
     if (isPOsError) toast({ title: 'Error Loading Purchase Orders', description: posError?.message, variant: 'destructive' });
     if (isProductsError) toast({ title: 'Error Loading Products', description: productsError?.message, variant: 'destructive' });
     if (isSalesError) toast({ title: 'Error Loading Sales', description: salesError?.message, variant: 'destructive' });
-  }, [isPOsError, posError, isProductsError, productsError, isSalesError, salesError, toast]);
+    if (isLocationsError) toast({ title: 'Error Loading Locations', description: locationsError?.message, variant: 'destructive' });
+  }, [isPOsError, posError, isProductsError, productsError, isSalesError, salesError, isLocationsError, locationsError, toast]);
 
 
   const updateProductStockMutation = useMutation<void, Error, { orderForStockUpdate: PurchaseOrder; isReverting: boolean }>({
     mutationFn: async ({ orderForStockUpdate, isReverting }) => {
       if (!db) throw new Error("Firestore not available");
-      if (orderForStockUpdate.status !== 'Received' && !isReverting) return;
+      if ((orderForStockUpdate.status !== 'Received' && !isReverting) || !orderForStockUpdate.locationId) return;
 
       const batch = writeBatch(db);
-      const productsToUpdateLocally = [...products]; // Use a local copy of products from query data
-
+      
       for (const item of orderForStockUpdate.items) {
-        const product = productsToUpdateLocally.find(p => p.id === item.productId);
+        const product = products.find(p => p.id === item.productId);
         if (product) {
           const productRef = doc(db, PRODUCTS_COLLECTION, item.productId);
           const operation = isReverting ? -1 : 1;
-          const newStockQuantity = Math.max(0, product.stockQuantity + (item.quantity * operation));
-          batch.update(productRef, { stockQuantity: newStockQuantity });
+          const currentStock = product.stockByLocation?.[orderForStockUpdate.locationId] || 0;
+          const newStockQuantity = Math.max(0, currentStock + (item.quantity * operation));
+          
+          batch.update(productRef, {
+              [`stockByLocation.${orderForStockUpdate.locationId}`]: newStockQuantity
+          });
         }
       }
       await batch.commit();
@@ -109,15 +125,15 @@ export default function PurchasesPage() {
     mutationFn: async ({ orderData, isEditing, originalOrder }) => {
       if (!db) throw new Error("Firestore not available");
       
-      const orderToSave = { ...orderData };
+      const orderToSave: Partial<PurchaseOrder> = { ...orderData };
       Object.keys(orderToSave).forEach(keyStr => {
         const key = keyStr as keyof typeof orderToSave;
-        if (orderToSave[key] === undefined) {
-          delete orderToSave[key];
+        if ((orderToSave as any)[key] === undefined) {
+          delete (orderToSave as any)[key];
         }
       });
 
-      const poRef = doc(db, PURCHASE_ORDERS_COLLECTION, orderToSave.id);
+      const poRef = doc(db, PURCHASE_ORDERS_COLLECTION, orderToSave.id!);
       await setDoc(poRef, orderToSave, { merge: isEditing });
 
       // Stock update logic
@@ -125,7 +141,7 @@ export default function PurchasesPage() {
         await updateProductStockMutation.mutateAsync({ orderForStockUpdate: originalOrder, isReverting: true });
       }
       if (orderToSave.status === 'Received') {
-        await updateProductStockMutation.mutateAsync({ orderForStockUpdate: orderToSave, isReverting: false });
+        await updateProductStockMutation.mutateAsync({ orderForStockUpdate: orderToSave as PurchaseOrder, isReverting: false });
       }
     },
     onSuccess: (_, variables) => {
@@ -164,6 +180,10 @@ export default function PurchasesPage() {
   };
 
   const handleAddNewPurchaseOrder = () => {
+    if (!selectedLocationId) {
+        toast({ title: "No Location Selected", description: "Please select a location from the sidebar before adding a purchase order.", variant: "destructive" });
+        return;
+    }
     setPurchaseOrderToEdit(null);
     setIsFormOpen(true);
   };
@@ -177,18 +197,13 @@ export default function PurchasesPage() {
     deletePurchaseOrderMutation.mutate(orderId);
   };
 
-  if (!db) {
-    return (
-      <div className="space-y-8">
-        <Card className="border-destructive">
-          <CardHeader><CardTitle className="text-destructive">Firebase Not Connected</CardTitle></CardHeader>
-          <CardContent><p>Cannot load purchase orders. Please check Firebase configuration.</p></CardContent>
-        </Card>
-      </div>
-    );
-  }
+  const filteredPurchaseOrders = selectedLocationId
+    ? purchaseOrders.filter(po => po.locationId === selectedLocationId)
+    : purchaseOrders;
 
-  if (isLoadingPOs || isLoadingProducts || isLoadingSales) {
+  const displayLocationName = selectedLocationId ? locations.find(l => l.id === selectedLocationId)?.name : 'All Locations';
+
+  if (isLoadingPOs || isLoadingProducts || isLoadingSales || isLoadingLocations) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -206,7 +221,7 @@ export default function PurchasesPage() {
             Purchase Orders
           </h1>
           <p className="text-muted-foreground text-md">
-            Manage your inventory purchases and suppliers. Data stored in Firestore.
+            Manage inventory purchases for your locations. Data is stored in Firestore.
           </p>
         </div>
         <Button onClick={handleAddNewPurchaseOrder} disabled={purchaseOrderMutation.isPending}>
@@ -222,21 +237,24 @@ export default function PurchasesPage() {
         purchaseOrderToEdit={purchaseOrderToEdit}
         availableProducts={products}
         allSales={sales}
+        locations={locations}
+        selectedLocationId={selectedLocationId}
       />
 
       <Card>
         <CardHeader>
           <CardTitle>Purchase Order History</CardTitle>
           <CardDescription>
-            {purchaseOrders.length > 0 ? `You have ${purchaseOrders.length} purchase order(s).` : 'No purchase orders found. Add one to get started.'}
+            {`Displaying orders for: ${displayLocationName}. You have ${filteredPurchaseOrders.length} order(s) for this view.`}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <PurchaseOrderTable 
-            purchaseOrders={purchaseOrders} 
+            purchaseOrders={filteredPurchaseOrders} 
             onEdit={handleEditPurchaseOrder}
             onDelete={handleDeletePurchaseOrder}
             isLoading={deletePurchaseOrderMutation.isPending || purchaseOrderMutation.isPending || updateProductStockMutation.isPending}
+            locations={locations}
           />
         </CardContent>
       </Card>

@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import type { Product, BuiltProductRecipe } from '@/types';
+import type { Product, BuiltProductRecipe, Location } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -34,7 +34,8 @@ interface ProductFormProps {
   onOpenChange: (isOpen: boolean) => void;
   onSave: (product: Product) => void;
   productToEdit?: Product | null;
-  availableRecipes?: BuiltProductRecipe[]; // For "Load from Recipe"
+  availableRecipes?: BuiltProductRecipe[];
+  locations: Location[];
 }
 
 const defaultProduct: Omit<Product, 'id'> = {
@@ -42,13 +43,13 @@ const defaultProduct: Omit<Product, 'id'> = {
   description: '',
   price: 0,
   costOfGoodsSold: 0,
-  stockQuantity: 0,
+  stockByLocation: {},
   category: '',
   imageUrl: '',
   recipeId: undefined,
 };
 
-export function ProductForm({ isOpen, onOpenChange, onSave, productToEdit, availableRecipes = [] }: ProductFormProps) {
+export function ProductForm({ isOpen, onOpenChange, onSave, productToEdit, availableRecipes = [], locations = [] }: ProductFormProps) {
   const [product, setProduct] = useState<Omit<Product, 'id'>>(defaultProduct);
   const [isSuggesting, setIsSuggesting] = useState(false);
   const { toast } = useToast();
@@ -65,9 +66,22 @@ export function ProductForm({ isOpen, onOpenChange, onSave, productToEdit, avail
     const { name, value } = e.target;
     setProduct((prev) => ({ 
       ...prev, 
-      [name]: (name === 'price' || name === 'stockQuantity' || name === 'costOfGoodsSold') 
+      [name]: (name === 'price' || name === 'costOfGoodsSold') 
                ? parseFloat(value) || 0 
                : value 
+    }));
+  };
+
+  const handleStockChange = (locationId: string, value: string) => {
+    const newStock = parseInt(value, 10);
+    if (isNaN(newStock) && value !== '') return;
+
+    setProduct(prev => ({
+        ...prev,
+        stockByLocation: {
+            ...prev.stockByLocation,
+            [locationId]: isNaN(newStock) ? 0 : newStock,
+        }
     }));
   };
   
@@ -118,10 +132,10 @@ export function ProductForm({ isOpen, onOpenChange, onSave, productToEdit, avail
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!product.name || product.price <= 0 || product.stockQuantity < 0) {
+    if (!product.name || product.price <= 0) {
       toast({
         title: 'Invalid Input',
-        description: 'Please provide a valid name, selling price (>0), and stock quantity (>=0).',
+        description: 'Please provide a valid name and selling price (>0).',
         variant: 'destructive',
       });
       return;
@@ -153,7 +167,7 @@ export function ProductForm({ isOpen, onOpenChange, onSave, productToEdit, avail
         </DialogHeader>
         <form onSubmit={handleSubmit}>
         <ScrollArea className="max-h-[70vh] p-1 pr-6">
-          <div className="space-y-4 py-4 pr-1"> {/* Added pr-1 for scrollbar spacing */}
+          <div className="space-y-4 py-4 pr-1">
             {availableRecipes.length > 0 && (
               <div className="space-y-2">
                 <Label htmlFor="loadFromRecipe">Load from Recipe (Optional)</Label>
@@ -202,10 +216,29 @@ export function ProductForm({ isOpen, onOpenChange, onSave, productToEdit, avail
                 <Input id="price" name="price" type="number" value={product.price} onChange={handleChange} min="0.01" step="0.01" required />
               </div>
             </div>
-             <div>
-                <Label htmlFor="stockQuantity">Stock Quantity*</Label>
-                <Input id="stockQuantity" name="stockQuantity" type="number" value={product.stockQuantity} onChange={handleChange} min="0" step="1" required />
+
+            <div className="space-y-2 pt-4 border-t">
+                <h3 className="text-md font-semibold">Stock Quantity by Location</h3>
+                {locations.length > 0 ? (
+                    locations.map(location => (
+                        <div key={location.id} className="grid grid-cols-2 items-center">
+                            <Label htmlFor={`stock-${location.id}`}>{location.name}</Label>
+                            <Input
+                                id={`stock-${location.id}`}
+                                type="number"
+                                value={product.stockByLocation?.[location.id] || ''}
+                                onChange={(e) => handleStockChange(location.id, e.target.value)}
+                                min="0"
+                                step="1"
+                                placeholder="0"
+                            />
+                        </div>
+                    ))
+                ) : (
+                    <p className="text-sm text-muted-foreground">No locations defined. Please add a location first.</p>
+                )}
             </div>
+             
             <div>
               <Label htmlFor="category">Category</Label>
               <Input id="category" name="category" value={product.category || ''} onChange={handleChange} />
@@ -231,7 +264,7 @@ export function ProductForm({ isOpen, onOpenChange, onSave, productToEdit, avail
             </div>
           </div>
           </ScrollArea>
-          <DialogFooter className="pt-4 mt-2 border-t"> {/* Added mt-2 for spacing */}
+          <DialogFooter className="pt-4 mt-2 border-t">
             <DialogClose asChild>
               <Button type="button" variant="outline">Cancel</Button>
             </DialogClose>

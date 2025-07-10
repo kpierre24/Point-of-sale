@@ -1,12 +1,18 @@
 import type { PAYMENT_METHODS } from '@/config/constants';
 
+export interface Location {
+  id: string;
+  name: string;
+  address?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
   description?: string;
   price: number; // Selling price
   costOfGoodsSold?: number; // Cost to produce/acquire
-  stockQuantity: number;
+  stockByLocation: Record<string, number>; // Replaces stockQuantity: { [locationId: string]: quantity }
   category?: string;
   imageUrl?: string; // Placeholder for product image
   recipeId?: string; // Optional link to a BuiltProductRecipe
@@ -39,6 +45,7 @@ export interface PurchaseOrder {
   items: PurchaseOrderItem[];
   grandTotal: number; 
   notes?: string;
+  locationId: string; // Added for location tracking
 }
 
 export const USER_ROLES = ["Front Staff", "Manager", "Owner", "Administrator"] as const;
@@ -71,6 +78,7 @@ export interface SoldProduct {
   total: number;
   timestamp: string; 
   productId?: string; 
+  locationId: string; // Added for location tracking
   costOfGoodsSoldAtTimeOfSale?: number; // Added for P&L
   customerId?: string; 
   paymentMethod: PaymentMethod;
@@ -106,7 +114,7 @@ export interface BuiltProductRecipe {
 
 // Types for Top-Up Card Feature
 export interface TopUpCard {
-  id: string; // Internal UUID for React keys, NOT the cardId for QR
+  id: string; // This is the Firestore document ID
   cardId: string; // User-facing, unique, human-readable ID for QR code
   customerId?: string; // Optional link to existing Customer
   currentBalance: number;

@@ -1,13 +1,12 @@
-
 // src/app/sales/page.tsx
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import type { SoldProduct, Product, TopUpCard, CardTransaction, AppSettings } from "@/types"; 
+import { useState, useEffect, useCallback } from "react";
+import type { SoldProduct, Product, TopUpCard, CardTransaction, AppSettings, Location } from "@/types"; 
 import { SaleForm } from "@/components/SaleForm";
 import { SalesHistoryTable } from "@/components/SalesHistoryTable";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { History, Printer, Loader2, Download } from "lucide-react";
+import { History, Printer, Loader2, Download, WifiOff } from "lucide-react";
 import { Receipt } from "@/components/Receipt"; 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +24,7 @@ import { APP_TITLE as DEFAULT_APP_TITLE } from "@/config/constants";
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, setDoc, addDoc, writeBatch, query as firestoreQuery, orderBy, where } from 'firebase/firestore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const SALES_COLLECTION = 'sales';
 const PRODUCTS_COLLECTION = 'products';
@@ -74,7 +74,7 @@ const fetchAppSettings = async (): Promise<Partial<AppSettings>> => {
 };
 
 
-export default function SalesPage() {
+export default function SalesPage({ selectedLocationId }: { selectedLocationId: string | null }) {
   const [receiptData, setReceiptData] = useState<SoldProduct | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const receiptComponentRef = useRef<HTMLDivElement>(null);
@@ -114,18 +114,20 @@ export default function SalesPage() {
   const recordSaleMutation = useMutation<SoldProduct, Error, { newSaleData: Omit<SoldProduct, "id" | "timestamp" | "staffId" | "staffName">; paymentCardToUpdate?: TopUpCard; saleTotal?: number }>({
     mutationFn: async ({ newSaleData, paymentCardToUpdate, saleTotal }) => {
       if (!db) throw new Error("Firestore not available");
+      if (!newSaleData.locationId) throw new Error("Location ID is missing for the sale.");
+      
       const batch = writeBatch(db);
 
       const saleToSave: SoldProduct = {
         ...newSaleData,
-        id: crypto.randomUUID(), // Still using client-generated ID for the sale itself
+        id: crypto.randomUUID(),
         timestamp: new Date().toISOString(),
       };
       
       Object.keys(saleToSave).forEach(keyStr => {
         const key = keyStr as keyof typeof saleToSave;
-        if (saleToSave[key] === undefined) {
-          delete saleToSave[key];
+        if ((saleToSave as any)[key] === undefined) {
+          delete (saleToSave as any)[key];
         }
       });
 
@@ -139,14 +141,15 @@ export default function SalesPage() {
         const productRef = doc(db, PRODUCTS_COLLECTION, saleToSave.productId);
         const product = products.find(p => p.id === saleToSave.productId);
         if (product) {
-          const newStock = Math.max(0, product.stockQuantity - saleToSave.quantity);
-          batch.update(productRef, { stockQuantity: newStock });
+          const currentStock = product.stockByLocation?.[saleToSave.locationId] || 0;
+          const newStock = Math.max(0, currentStock - saleToSave.quantity);
+          batch.update(productRef, { [`stockByLocation.${saleToSave.locationId}`]: newStock });
         }
       }
       
       // Update Top-Up Card balance and add transaction if applicable
       if (paymentCardToUpdate && saleTotal !== undefined) {
-        const cardRef = doc(db, TOPUP_CARDS_COLLECTION, paymentCardToUpdate.id); // Use Firestore document ID (paymentCardToUpdate.id)
+        const cardRef = doc(db, TOPUP_CARDS_COLLECTION, paymentCardToUpdate.id);
         const newBalance = paymentCardToUpdate.currentBalance - saleTotal;
         const now = new Date().toISOString();
         
@@ -155,22 +158,22 @@ export default function SalesPage() {
             lastUpdatedAt: now,
         });
 
-        const newTransaction: Omit<CardTransaction, 'id'> = { // Firestore will generate ID
-            cardId: paymentCardToUpdate.cardId, // The user-facing card ID
+        const newTransaction: Omit<CardTransaction, 'id'> = {
+            cardId: paymentCardToUpdate.cardId,
             timestamp: now,
             type: 'Purchase',
             amount: -saleTotal,
             balanceBefore: paymentCardToUpdate.currentBalance,
             balanceAfter: newBalance,
-            staffMember: 'Staff User', // Placeholder
+            staffMember: 'Staff User',
             notes: `Sale: ${saleToSave.name} x${saleToSave.quantity}`,
         };
-        const transactionRef = doc(collection(db, CARD_TRANSACTIONS_COLLECTION)); // Auto-generate ID
+        const transactionRef = doc(collection(db, CARD_TRANSACTIONS_COLLECTION));
         batch.set(transactionRef, newTransaction);
       }
 
       await batch.commit();
-      return saleToSave; // Return newSale to pass to onSuccess
+      return saleToSave;
     },
     onSuccess: (newSaleResult) => { 
       queryClient.invalidateQueries({ queryKey: [SALES_COLLECTION] });
@@ -196,8 +199,6 @@ export default function SalesPage() {
     });
   };
   
-  const recentItemsForAI = soldItems.slice(0, 10).map(item => ({ name: item.name, price: item.price }));
-
   const handlePrintReceipt = useReactToPrint({
     content: () => receiptComponentRef.current,
     documentTitle: `Receipt-${receiptData?.id.substring(0,8) || 'sale'}`,
@@ -205,11 +206,6 @@ export default function SalesPage() {
     onPrintError: () => toast({title: "Print Error", description: "Could not print receipt.", variant: "destructive"}),
   });
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
-  };
-
-  // This function finds a card by its user-facing cardId from the already fetched topUpCards data
   const findCardByCardId = useCallback((cardId: string): TopUpCard | undefined => {
     return topUpCards.find(c => c.cardId.toUpperCase() === cardId.toUpperCase());
   }, [topUpCards]);
@@ -224,7 +220,7 @@ export default function SalesPage() {
       "ID", "Timestamp", "Product Name", "Quantity", "Unit Price", 
       "Subtotal Before Discount", "Discount Type", "Discount Value", "Discount Amount",
       "Subtotal After Discount", "Tax Amount", "Total", "Payment Method", 
-      "Product ID", "Cost of Goods Sold at Sale", "Customer ID", "Staff ID", "Staff Name", "Card ID Used"
+      "Product ID", "Cost of Goods Sold at Sale", "Customer ID", "Staff ID", "Staff Name", "Card ID Used", "Location ID"
     ];
     const csvRows = [
       headers.join(','),
@@ -235,7 +231,7 @@ export default function SalesPage() {
         escapeCsvField(sale.subtotal), escapeCsvField(sale.taxAmount), escapeCsvField(sale.total),
         escapeCsvField(sale.paymentMethod), escapeCsvField(sale.productId), escapeCsvField(sale.costOfGoodsSoldAtTimeOfSale),
         escapeCsvField(sale.customerId), escapeCsvField(sale.staffId), escapeCsvField(sale.staffName),
-        escapeCsvField(sale.cardIdUsed),
+        escapeCsvField(sale.cardIdUsed), escapeCsvField(sale.locationId)
       ].join(','))
     ];
     const csvString = csvRows.join('\n');
@@ -252,16 +248,9 @@ export default function SalesPage() {
     toast({ title: "Export Successful", description: "Sales data exported to CSV." });
   };
 
-  if (!db) {
-    return (
-      <div className="space-y-8">
-        <Card className="border-destructive">
-          <CardHeader><CardTitle className="text-destructive">Firebase Not Connected</CardTitle></CardHeader>
-          <CardContent><p>Cannot load sales data. Please check Firebase configuration.</p></CardContent>
-        </Card>
-      </div>
-    );
-  }
+  const filteredSoldItems = selectedLocationId 
+    ? soldItems.filter(item => item.locationId === selectedLocationId)
+    : soldItems;
 
   if (isLoadingSales || isLoadingProducts || isLoadingTopUpCards || isLoadingAppSettings) {
     return (
@@ -288,8 +277,17 @@ export default function SalesPage() {
         </header>
 
         <main>
+          {!selectedLocationId && (
+            <Alert variant="destructive" className="mb-6">
+                <WifiOff className="h-5 w-5" />
+                <AlertTitle>No Location Selected</AlertTitle>
+                <AlertDescription>
+                    Please select a location from the sidebar to record a new sale.
+                </AlertDescription>
+            </Alert>
+          )}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-            <div className="lg:col-span-2">
+            <div className={`lg:col-span-2 ${!selectedLocationId ? 'opacity-50 pointer-events-none' : ''}`}>
               <SaleForm 
                 onRecordSale={handleRecordSale} 
                 soldItemsForAISuggestion={soldItems.slice(0, 10).map(item => ({ name: item.name, price: item.price }))}
@@ -297,6 +295,7 @@ export default function SalesPage() {
                 findCardByCardId={findCardByCardId}
                 appSettings={appSettings}
                 isSubmittingSale={recordSaleMutation.isPending}
+                selectedLocationId={selectedLocationId}
               />
             </div>
             <div className="lg:col-span-3">
@@ -308,7 +307,7 @@ export default function SalesPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <SalesHistoryTable soldItems={soldItems} />
+                  <SalesHistoryTable soldItems={filteredSoldItems} />
                 </CardContent>
               </Card>
             </div>

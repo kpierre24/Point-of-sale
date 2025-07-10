@@ -2,14 +2,14 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import type { SoldProduct, User as AppUser } from '@/types'; // Renamed User to AppUser
+import type { SoldProduct, User as AppUser, Location } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, BarChartBig, UserSquare, CalendarDays, Loader2 } from "lucide-react";
+import { FileText, BarChartBig, UserSquare, CalendarDays, Loader2, MapPin } from "lucide-react";
 import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, getWeek, getYear } from 'date-fns';
 import { Label } from "@/components/ui/label";
 import { db } from '@/lib/firebase';
@@ -18,7 +18,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 
 const SALES_COLLECTION = 'sales';
-const USERS_COLLECTION = 'users'; // Assuming staff users are stored here
+const USERS_COLLECTION = 'users';
+const LOCATIONS_COLLECTION = 'locations';
 
 type ReportType = 'staff' | 'daily' | 'weekly' | 'monthly' | '';
 interface ReportDataItem {
@@ -35,10 +36,6 @@ const fetchAllSalesForReport = async (startDate?: Date, endDate?: Date): Promise
   const salesCol = collection(db, SALES_COLLECTION);
   let q = firestoreQuery(salesCol, orderBy("timestamp", "desc"));
 
-  // Firestore where clauses for date range filtering
-  // Note: Firestore requires ISO string format for timestamp comparisons if stored as strings.
-  // If timestamps are Firestore Timestamp objects, direct comparison is possible.
-  // Assuming timestamps are ISO strings for this example.
   if (startDate) {
     q = firestoreQuery(q, where("timestamp", ">=", startDate.toISOString()));
   }
@@ -59,11 +56,18 @@ const fetchAllStaff = async (): Promise<AppUser[]> => {
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AppUser));
 };
 
+const fetchLocations = async (): Promise<Location[]> => {
+    if (!db) throw new Error("Firestore not available");
+    const snapshot = await getDocs(collection(db, LOCATIONS_COLLECTION));
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location));
+};
+
 
 export default function ReportsPage() {
   const { toast } = useToast();
   const [reportType, setReportType] = useState<ReportType>('');
   const [selectedStaffId, setSelectedStaffId] = useState<string>('all');
+  const [selectedLocationId, setSelectedLocationId] = useState<string>('all');
   const [startDate, setStartDate] = useState<Date | undefined>(startOfMonth(new Date()));
   const [endDate, setEndDate] = useState<Date | undefined>(endOfMonth(new Date()));
   const [generatedReportData, setGeneratedReportData] = useState<ReportDataItem[]>([]);
@@ -75,18 +79,17 @@ export default function ReportsPage() {
     queryFn: fetchAllStaff,
     enabled: !!db,
   });
+
+  const { data: locations = [], isLoading: isLoadingLocations, isError: isLocationsError, error: locationsError } = useQuery<Location[], Error>({
+      queryKey: [LOCATIONS_COLLECTION],
+      queryFn: fetchLocations,
+      enabled: !!db,
+  });
   
-  // Sales data will be fetched on demand when generating report
-  // const { data: allSales = [], isLoading: isLoadingSales, isError: isSalesError, error: salesError } = useQuery<SoldProduct[], Error>({
-  //   queryKey: [SALES_COLLECTION], // Could add date range to key if we pre-fetch filtered sales
-  //   queryFn: () => fetchAllSalesForReport(startDate, endDate),
-  //   enabled: !!db && !!reportType && (reportType !== 'staff'), // Example of conditional fetching
-  // });
-  
-   useEffect(() => {
+  useEffect(() => {
     if (isStaffError) toast({ title: 'Error Loading Staff', description: staffError?.message, variant: 'destructive' });
-    // if (isSalesError) toast({ title: 'Error Loading Sales Data', description: salesError?.message, variant: 'destructive' });
-  }, [isStaffError, staffError, toast]);
+    if (isLocationsError) toast({ title: 'Error Loading Locations', description: locationsError?.message, variant: 'destructive' });
+  }, [isStaffError, staffError, isLocationsError, locationsError, toast]);
 
 
   const getStaffName = (staffId?: string): string => {
@@ -115,19 +118,10 @@ export default function ReportsPage() {
         let data: ReportDataItem[] = [];
         let title = '';
 
-        // Ensure date range filtering for all relevant report types if not already handled by fetchAllSalesForReport
-        // For simplicity, fetchAllSalesForReport now handles date range
-        let filteredSales = fetchedSales; 
-        // if (startDate && endDate && (reportType === 'daily' || reportType === 'weekly' || reportType === 'monthly')) {
-        //   const rangeEnd = new Date(endDate);
-        //   rangeEnd.setHours(23, 59, 59, 999);
-        //   filteredSales = fetchedSales.filter(sale => 
-        //     isWithinInterval(parseISO(sale.timestamp), { start: startDate, end: rangeEnd })
-        //   );
-        // } else {
-        //     filteredSales = fetchedSales;
-        // }
-
+        let filteredSales = fetchedSales;
+        if (selectedLocationId !== 'all') {
+            filteredSales = filteredSales.filter(s => s.locationId === selectedLocationId);
+        }
 
       switch (reportType) {
         case 'staff':
@@ -135,7 +129,7 @@ export default function ReportsPage() {
           const staffSales: { [key: string]: { totalAmount: number; salesCount: number; items: SoldProduct[] } } = {};
           
           (selectedStaffId === 'all' ? filteredSales : filteredSales.filter(s => s.staffId === selectedStaffId)).forEach(sale => {
-            const staffIdKey = sale.staffId || 'unknown'; // Ensure staffId is always a string key
+            const staffIdKey = sale.staffId || 'unknown';
             if (!staffSales[staffIdKey]) {
               staffSales[staffIdKey] = { totalAmount: 0, salesCount: 0, items: [] };
             }
@@ -277,19 +271,8 @@ export default function ReportsPage() {
       </ScrollArea>
     );
   };
-
-  if (!db) {
-    return (
-      <div className="space-y-8">
-        <Card className="border-destructive">
-          <CardHeader><CardTitle className="text-destructive">Firebase Not Connected</CardTitle></CardHeader>
-          <CardContent><p>Cannot load reports. Please check Firebase configuration.</p></CardContent>
-        </Card>
-      </div>
-    );
-  }
   
-  if (isLoadingStaff) {
+  if (isLoadingStaff || isLoadingLocations) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -317,7 +300,7 @@ export default function ReportsPage() {
           <CardDescription>Select report type and filters to generate a sales report.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
             <div>
               <Label htmlFor="reportType">Report Type</Label>
               <Select value={reportType} onValueChange={(value: ReportType) => {setReportType(value); setGeneratedReportData([]); setReportTitle('');}}>
@@ -331,6 +314,21 @@ export default function ReportsPage() {
                   <SelectItem value="monthly"><CalendarDays className="inline-block mr-2 h-4 w-4" />Monthly Summary</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            
+            <div>
+                <Label htmlFor="location">Location</Label>
+                <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
+                    <SelectTrigger id="location">
+                        <SelectValue placeholder="Select location"/>
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all"><MapPin className="inline-block mr-2 h-4 w-4"/>All Locations</SelectItem>
+                        {locations.map(loc => (
+                            <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
             </div>
 
             {reportType === 'staff' && (
@@ -350,7 +348,7 @@ export default function ReportsPage() {
               </div>
             )}
 
-            {(reportType === 'daily' || reportType === 'weekly' || reportType === 'monthly' || reportType === 'staff') && ( // Staff report also uses date range
+            {(reportType === 'daily' || reportType === 'weekly' || reportType === 'monthly' || reportType === 'staff') && (
               <>
                 <div>
                   <Label htmlFor="startDate">Start Date</Label>

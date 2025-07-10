@@ -1,4 +1,3 @@
-
 // src/components/SaleForm.tsx
 "use client";
 
@@ -12,7 +11,7 @@ import { TAX_RATE as DEFAULT_TAX_RATE, PAYMENT_METHODS } from "@/config/constant
 import { suggestProductDetails, type SuggestProductDetailsInput } from '@/ai/flows/suggest-product-details';
 import { Lightbulb, PlusSquare, Loader2, PackageSearch, ScanLine, CreditCard, CheckCircle, XCircle, Percent, MinusCircle, Tag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -26,13 +25,14 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 interface SaleFormProps {
   onRecordSale: (
     saleData: Omit<SoldProduct, "id" | "timestamp" | "staffId" | "staffName">,
-    paymentCardDetails?: { card: TopUpCard; saleTotal: number } // Pass full card object and saleTotal
+    paymentCardDetails?: { card: TopUpCard; saleTotal: number }
   ) => void;
   soldItemsForAISuggestion: Pick<SoldProduct, 'name' | 'price'>[];
   availableProducts: Product[];
-  findCardByCardId: (cardId: string) => TopUpCard | undefined; // Changed from findCardById to findCardByCardId for clarity
-  appSettings: Partial<AppSettings>; // Pass appSettings as a prop
-  isSubmittingSale?: boolean; // Added prop to indicate if sale is being submitted
+  findCardByCardId: (cardId: string) => TopUpCard | undefined;
+  appSettings: Partial<AppSettings>;
+  isSubmittingSale?: boolean;
+  selectedLocationId: string | null;
 }
 
 export function SaleForm({ 
@@ -41,7 +41,8 @@ export function SaleForm({
   availableProducts,
   findCardByCardId,
   appSettings,
-  isSubmittingSale = false // Default to false
+  isSubmittingSale = false,
+  selectedLocationId,
 }: SaleFormProps) {
   const [productName, setProductName] = useState("");
   const [quantity, setQuantity] = useState<number | string>(1);
@@ -120,7 +121,7 @@ export function SaleForm({
 
   useEffect(() => {
     calculateTotals();
-  }, [calculateTotals]); // calculateTotals includes all its dependencies
+  }, [calculateTotals]);
 
   useEffect(() => {
     if (paymentMethod !== 'Top-Up Card') {
@@ -181,7 +182,7 @@ export function SaleForm({
   };
 
   const handleVerifyPaymentCard = (idToVerify: string) => {
-    const card = findCardByCardId(idToVerify.toUpperCase()); // Use the passed prop
+    const card = findCardByCardId(idToVerify.toUpperCase());
     if (card) {
       setVerifiedPaymentCard(card);
       setPaymentCardIdInput(card.cardId);
@@ -200,6 +201,11 @@ export function SaleForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedLocationId) {
+        toast({ title: "Location Not Selected", description: "Please select a location before recording a sale.", variant: "destructive" });
+        return;
+    }
+
     const numQuantity = Number(quantity);
     const numPrice = Number(price);
 
@@ -212,8 +218,9 @@ export function SaleForm({
     const costOfGoodsSold = productInStock?.costOfGoodsSold;
 
     if (selectedProductId) {
-      if (productInStock && productInStock.stockQuantity < numQuantity) {
-        toast({ title: "Insufficient Stock", description: `Only ${productInStock.stockQuantity} of ${productName} available.`, variant: "destructive" });
+      const stockInLocation = productInStock?.stockByLocation?.[selectedLocationId] || 0;
+      if (stockInLocation < numQuantity) {
+        toast({ title: "Insufficient Stock", description: `Only ${stockInLocation} of ${productName} available at this location.`, variant: "destructive" });
         return;
       }
     }
@@ -251,7 +258,8 @@ export function SaleForm({
         costOfGoodsSoldAtTimeOfSale: costOfGoodsSold,
         paymentMethod: paymentMethod,
         cardIdUsed: paymentMethod === "Top-Up Card" && verifiedPaymentCard ? verifiedPaymentCard.cardId : undefined,
-    }, paymentCardDetails); // Pass card details here
+        locationId: selectedLocationId,
+    }, paymentCardDetails);
 
     // Reset form
     setProductName("");
@@ -267,6 +275,11 @@ export function SaleForm({
   };
   
   const canSubmit = productName.trim() && Number(quantity) > 0 && Number(price) > 0 && !isScanningPaymentCard && !isSuggesting;
+
+  const productsForLocation = availableProducts.map(p => ({
+      ...p,
+      stockForDisplay: p.stockByLocation?.[selectedLocationId || ''] ?? 0,
+  }));
 
   return (
     <Card className="shadow-lg">
@@ -292,12 +305,12 @@ export function SaleForm({
                     Enter Custom Item
                   </span>
                 </SelectItem>
-                {availableProducts.filter(p => p.stockQuantity > 0).map(product => (
+                {productsForLocation.filter(p => p.stockForDisplay > 0).map(product => (
                   <SelectItem key={product.id} value={product.id}>
-                    {product.name} (Stock: {product.stockQuantity}) - {formatCurrency(product.price)}
+                    {product.name} (Stock: {product.stockForDisplay}) - {formatCurrency(product.price)}
                   </SelectItem>
                 ))}
-                 {availableProducts.filter(p => p.stockQuantity <= 0).map(product => (
+                 {productsForLocation.filter(p => p.stockForDisplay <= 0).map(product => (
                   <SelectItem key={product.id} value={product.id} disabled>
                     {product.name} (Out of Stock) - {formatCurrency(product.price)}
                   </SelectItem>
@@ -492,4 +505,3 @@ export function SaleForm({
     </Card>
   );
 }
-

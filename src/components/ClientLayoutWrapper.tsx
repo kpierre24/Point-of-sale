@@ -6,7 +6,7 @@ import type React from 'react';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'; // Added
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   SidebarProvider,
   Sidebar,
@@ -19,11 +19,19 @@ import {
   SidebarInset,
   SidebarFooter,
 } from '@/components/ui/sidebar';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { APP_TITLE as DEFAULT_APP_TITLE } from '@/config/constants';
-import type { AppSettings } from '@/types';
-import { db } from '@/lib/firebase'; // Added
-import { doc, getDoc, onSnapshot } from 'firebase/firestore'; // Added onSnapshot
-import { useToast } from '@/hooks/use-toast'; // Added
+import type { AppSettings, Location } from '@/types';
+import { db } from '@/lib/firebase';
+import { doc, getDoc, onSnapshot, collection, getDocs } from 'firebase/firestore';
+import { useToast } from '@/hooks/use-toast';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -37,7 +45,8 @@ import {
   FileText,
   CreditCard,
   Loader2, 
-  Database // Added Database icon for migration
+  Database,
+  MapPin, // Added icon for Locations
 } from 'lucide-react';
 
 interface NavItem {
@@ -45,7 +54,7 @@ interface NavItem {
   icon: React.ElementType;
   label: string;
   tooltip: string;
-  devOnly?: boolean; // Added for temporary links
+  devOnly?: boolean;
 }
 
 const navItems: NavItem[] = [
@@ -61,40 +70,60 @@ const navItems: NavItem[] = [
 ];
 
 const settingsNavItems: NavItem[] = [
+ { href: '/locations', icon: MapPin, label: 'Locations', tooltip: 'Manage Store Locations' },
  { href: '/settings', icon: SettingsIcon, label: 'Settings', tooltip: 'Application Settings' },
- // Temporary link for migration - REMOVE AFTER USE
  { href: '/migrate-data', icon: Database, label: 'Migrate Data (Dev)', tooltip: 'Migrate Local Storage to Firestore', devOnly: true },
 ];
 
 const APP_SETTINGS_DOC_ID = 'current'; 
-// Instantiate QueryClient once, outside the component function
+const LOCATIONS_COLLECTION = 'locations';
 const queryClient = new QueryClient(); 
+
+const useSelectedLocation = () => {
+    const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
+
+    useEffect(() => {
+        const storedLocation = sessionStorage.getItem('selectedLocationId');
+        if (storedLocation) {
+            setSelectedLocation(storedLocation);
+        }
+    }, []);
+
+    const setLocation = (locationId: string | null) => {
+        if (locationId) {
+            sessionStorage.setItem('selectedLocationId', locationId);
+        } else {
+            sessionStorage.removeItem('selectedLocationId');
+        }
+        setSelectedLocation(locationId);
+        // Using window.location.reload() is a simple way to ensure all components
+        // get the new location context. A more advanced solution might use a global state manager.
+        window.location.reload();
+    };
+
+    return [selectedLocation, setLocation] as const;
+};
 
 export function ClientLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [appTitle, setAppTitle] = useState(DEFAULT_APP_TITLE);
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [selectedLocation, setSelectedLocation] = useSelectedLocation();
   const { toast } = useToast();
 
   useEffect(() => {
     if (!db) {
       console.warn("Firestore not available. Using default settings.");
-      toast({
-        title: "Firebase Not Connected",
-        description: "App settings could not be loaded. Using defaults.",
-        variant: "destructive",
-        duration: 10000,
-      });
-      setAppTitle(DEFAULT_APP_TITLE);
-      document.documentElement.classList.remove('dark');
       setIsSettingsLoading(false);
       return;
     }
 
     setIsSettingsLoading(true);
     const settingsDocRef = doc(db, 'appSettings', APP_SETTINGS_DOC_ID);
+    const locationsColRef = collection(db, LOCATIONS_COLLECTION);
     
-    const unsubscribe = onSnapshot(settingsDocRef, (docSnap) => {
+    const unsubscribeSettings = onSnapshot(settingsDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const loadedSettings = docSnap.data() as AppSettings;
         setAppTitle(loadedSettings.storeName || DEFAULT_APP_TITLE);
@@ -112,17 +141,72 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
       console.error("Error fetching app settings from Firestore:", error);
       toast({
         title: "Error Loading Settings",
-        description: `Could not load app settings. Using defaults. Details: ${error.message || 'Unknown error'}`,
+        description: `Could not load app settings: ${error.message}`,
         variant: "destructive",
       });
-      setAppTitle(DEFAULT_APP_TITLE);
-      document.documentElement.classList.remove('dark');
       setIsSettingsLoading(false);
     });
 
-    return () => unsubscribe(); // Cleanup listener on component unmount
-  }, [toast]);
+    const fetchLocations = async () => {
+        try {
+            const snapshot = await getDocs(locationsColRef);
+            const fetchedLocations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location));
+            setLocations(fetchedLocations);
+            // If no location is selected, and there are locations available, select the first one.
+            if (!selectedLocation && fetchedLocations.length > 0) {
+                // Use a functional update to avoid stale state issues if needed, though direct set is often fine here.
+                setSelectedLocation(fetchedLocations[0].id);
+            }
+        } catch (error) {
+            console.error("Error fetching locations:", error);
+            toast({
+                title: "Error Loading Locations",
+                description: "Could not load store locations.",
+                variant: "destructive"
+            });
+        }
+    };
 
+    fetchLocations();
+
+    return () => unsubscribeSettings(); 
+  }, [toast, selectedLocation, setSelectedLocation]);
+
+  const LocationSelector = () => (
+    <div className="space-y-1 p-2">
+        <Label className="px-2 text-xs font-medium text-sidebar-foreground/70 group-data-[collapsible=icon]:hidden">
+            Location
+        </Label>
+        <Select
+            value={selectedLocation || ''}
+            onValueChange={(value) => setSelectedLocation(value)}
+            disabled={locations.length === 0}
+        >
+            <SelectTrigger className="group-data-[collapsible=icon]:hidden">
+                <SelectValue placeholder="Select Location" />
+            </SelectTrigger>
+            <SelectContent>
+                {locations.length > 0 ? (
+                    locations.map(loc => (
+                        <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                    ))
+                ) : (
+                    <SelectItem value="" disabled>No locations found</SelectItem>
+                )}
+            </SelectContent>
+        </Select>
+    </div>
+);
+
+  const isAppPage = (children as React.ReactElement)?.props?.isAppPage;
+
+  if (!isAppPage) {
+    return (
+        <QueryClientProvider client={queryClient}>
+            {children}
+        </QueryClientProvider>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -144,6 +228,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
             </div>
           </SidebarHeader>
           <SidebarContent className="flex-grow p-2 flex flex-col">
+            <LocationSelector />
             <SidebarMenu className="space-y-1 flex-grow">
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.href}>
@@ -200,7 +285,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
               </Link>
           </header>
           <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/40 min-h-[calc(100vh-3.5rem)] md:min-h-screen">
-              {children}
+              {React.cloneElement(children as React.ReactElement, { selectedLocationId: selectedLocation })}
           </div>
         </SidebarInset>
       </SidebarProvider>

@@ -5,6 +5,7 @@ import './globals.css';
 import { APP_TITLE } from '@/config/constants';
 import { Toaster } from '@/components/ui/toaster';
 import { ClientLayoutWrapper } from '@/components/ClientLayoutWrapper';
+import React from 'react';
 
 export const metadata: Metadata = {
   title: APP_TITLE,
@@ -16,9 +17,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Check if the children are for the splash page.
-  // This is a way to conditionally apply the main layout.
-  // A more robust solution might involve different root layouts for different route groups.
+  // Check if the page is the splash page by looking for a prop passed up
+  // from ClientLayoutWrapper. This is more robust than checking the segment name.
   if ((children as React.ReactElement)?.props?.childProp?.segment === '__PAGE__') {
      return (
         <html lang="en" className={`${GeistSans.variable}`}>
@@ -34,7 +34,7 @@ export default function RootLayout({
     <html lang="en" className={`${GeistSans.variable}`}>
       <body className={`font-sans antialiased`}>
         <ClientLayoutWrapper>
-          {children}
+          {React.cloneElement(children as React.ReactElement, { selectedLocationId: null, isAppPage: true })}
         </ClientLayoutWrapper>
         <Toaster />
       </body>
