@@ -177,7 +177,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
             Location
         </Label>
         <Select
-            value={selectedLocation || ''}
+            value={selectedLocation || undefined}
             onValueChange={(value) => setSelectedLocation(value)}
             disabled={locations.length === 0}
         >
@@ -190,7 +190,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
                         <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
                     ))
                 ) : (
-                    <SelectItem value="" disabled>No locations found</SelectItem>
+                    <SelectItem value="no-locations" disabled>No locations found</SelectItem>
                 )}
             </SelectContent>
         </Select>
