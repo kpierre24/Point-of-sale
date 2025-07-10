@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch, query as firestoreQuery, orderBy } from 'firebase/firestore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useLocation } from '@/context/LocationContext';
 
 const PURCHASE_ORDERS_COLLECTION = 'purchaseOrders';
 const PRODUCTS_COLLECTION = 'products';
@@ -48,11 +49,12 @@ const fetchLocations = async (): Promise<Location[]> => {
 };
 
 
-export default function PurchasesPage({ selectedLocationId }: { selectedLocationId: string | null }) {
+export default function PurchasesPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [purchaseOrderToEdit, setPurchaseOrderToEdit] = useState<PurchaseOrder | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { selectedLocationId } = useLocation();
 
   const { data: purchaseOrders = [], isLoading: isLoadingPOs, isError: isPOsError, error: posError } = useQuery<PurchaseOrder[], Error>({
     queryKey: [PURCHASE_ORDERS_COLLECTION],
@@ -201,7 +203,7 @@ export default function PurchasesPage({ selectedLocationId }: { selectedLocation
     ? purchaseOrders.filter(po => po.locationId === selectedLocationId)
     : purchaseOrders;
 
-  const displayLocationName = selectedLocationId ? locations.find(l => l.id === selectedLocationId)?.name : 'All Locations';
+  const displayLocationName = selectedLocationId && locations ? locations.find(l => l.id === selectedLocationId)?.name : 'All Locations';
 
   if (isLoadingPOs || isLoadingProducts || isLoadingSales || isLoadingLocations) {
     return (
@@ -254,7 +256,7 @@ export default function PurchasesPage({ selectedLocationId }: { selectedLocation
             onEdit={handleEditPurchaseOrder}
             onDelete={handleDeletePurchaseOrder}
             isLoading={deletePurchaseOrderMutation.isPending || purchaseOrderMutation.isPending || updateProductStockMutation.isPending}
-            locations={locations}
+            locations={locations || []}
           />
         </CardContent>
       </Card>

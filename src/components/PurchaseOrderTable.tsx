@@ -65,6 +65,7 @@ export function PurchaseOrderTable({ purchaseOrders, onEdit, onDelete, isLoading
   };
 
   const getLocationName = (locationId: string) => {
+      if (!locations) return 'Unknown';
       return locations.find(l => l.id === locationId)?.name || 'Unknown';
   };
 

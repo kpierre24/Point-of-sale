@@ -25,6 +25,7 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, setDoc, addDoc, writeBatch, query as firestoreQuery, orderBy, where } from 'firebase/firestore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useLocation } from "@/context/LocationContext";
 
 const SALES_COLLECTION = 'sales';
 const PRODUCTS_COLLECTION = 'products';
@@ -74,12 +75,13 @@ const fetchAppSettings = async (): Promise<Partial<AppSettings>> => {
 };
 
 
-export default function SalesPage({ selectedLocationId }: { selectedLocationId: string | null }) {
+export default function SalesPage() {
   const [receiptData, setReceiptData] = useState<SoldProduct | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const receiptComponentRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { selectedLocationId } = useLocation();
 
   const { data: soldItems = [], isLoading: isLoadingSales, isError: isSalesError, error: salesError } = useQuery<SoldProduct[], Error>({
     queryKey: [SALES_COLLECTION],

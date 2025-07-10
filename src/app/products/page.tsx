@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import type { Product, BuiltProductRecipe } from '@/types';
+import type { Product, BuiltProductRecipe, Location } from '@/types';
 import { Button } from '@/components/ui/button';
 import { ProductForm } from '@/components/ProductForm';
 import {
@@ -34,6 +34,7 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, setDoc, deleteDoc, orderBy, query as firestoreQuery } from 'firebase/firestore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useLocation } from '@/context/LocationContext';
 
 const PRODUCTS_COLLECTION = 'products';
 const RECIPES_COLLECTION = 'recipes';
@@ -73,11 +74,12 @@ const fetchLocations = async () => {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
-export default function ProductsPage({ selectedLocationId }: { selectedLocationId: string | null }) {
+export default function ProductsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [productToEdit, setProductToEdit] = useState<Product | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { selectedLocationId } = useLocation();
 
   const { data: products = [], isLoading: isLoadingProducts, isError: isProductsError, error: productsError } = useQuery<Product[], Error>({
     queryKey: [PRODUCTS_COLLECTION],
@@ -233,7 +235,7 @@ export default function ProductsPage({ selectedLocationId }: { selectedLocationI
       return Object.values(product.stockByLocation || {}).reduce((sum, current) => sum + current, 0);
   };
 
-  const displayLocationName = selectedLocationId ? locations.find(l => l.id === selectedLocationId)?.name : 'All Locations';
+  const displayLocationName = selectedLocationId && locations ? locations.find(l => l.id === selectedLocationId)?.name : 'All Locations';
 
 
   return (

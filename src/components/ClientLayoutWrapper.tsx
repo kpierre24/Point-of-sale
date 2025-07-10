@@ -46,6 +46,7 @@ import {
   Database,
   MapPin,
 } from 'lucide-react';
+import { LocationProvider, useLocation } from '@/context/LocationContext';
 
 interface NavItem {
   href: string;
@@ -77,12 +78,12 @@ const APP_SETTINGS_DOC_ID = 'current';
 const LOCATIONS_COLLECTION = 'locations';
 const queryClient = new QueryClient(); 
 
-export function ClientLayoutWrapper({ children }: { children: React.ReactNode }) {
+function LocationAwareLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [appTitle, setAppTitle] = useState(DEFAULT_APP_TITLE);
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
   const [locations, setLocations] = useState<Location[]>([]);
-  const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
+  const { selectedLocationId, setSelectedLocationId } = useLocation();
   const { toast } = useToast();
   
   const hasInitialized = useRef(false);
@@ -90,11 +91,6 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (hasInitialized.current) return;
     hasInitialized.current = true;
-
-    const storedLocation = sessionStorage.getItem('selectedLocationId');
-    if (storedLocation) {
-        setSelectedLocation(storedLocation);
-    }
     
     if (!db) {
       console.warn("Firestore not available. Using default settings.");
@@ -135,10 +131,12 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
             const fetchedLocations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location));
             setLocations(fetchedLocations);
 
-            if (!sessionStorage.getItem('selectedLocationId') && fetchedLocations.length > 0) {
+            const storedLocation = sessionStorage.getItem('selectedLocationId');
+            if (storedLocation) {
+                setSelectedLocationId(storedLocation);
+            } else if (fetchedLocations.length > 0) {
                 const defaultLocationId = fetchedLocations[0].id;
-                sessionStorage.setItem('selectedLocationId', defaultLocationId);
-                setSelectedLocation(defaultLocationId);
+                setSelectedLocationId(defaultLocationId);
             }
         } catch (error) {
             console.error("Error fetching locations:", error);
@@ -152,11 +150,10 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
     fetchLocations();
 
     return () => unsubscribeSettings(); 
-  }, [toast]);
+  }, [toast, setSelectedLocationId]);
 
   const handleLocationChange = (locationId: string) => {
-      sessionStorage.setItem('selectedLocationId', locationId);
-      setSelectedLocation(locationId);
+      setSelectedLocationId(locationId);
   };
 
   const LocationSelector = () => (
@@ -165,7 +162,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
             Location
         </Label>
         <Select
-            value={selectedLocation || undefined}
+            value={selectedLocationId || undefined}
             onValueChange={handleLocationChange}
             disabled={locations.length === 0}
         >
@@ -184,21 +181,14 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
         </Select>
     </div>
 );
-
+  
   const isSplashPage = pathname === '/';
-
-  // If it's the splash page, render children directly without the main layout
   if (isSplashPage) {
-    return (
-        <QueryClientProvider client={queryClient}>
-            {children}
-        </QueryClientProvider>
-    );
+    return <>{children}</>;
   }
 
   // Render the full application layout with sidebar
   return (
-    <QueryClientProvider client={queryClient}>
       <SidebarProvider defaultOpen>
         <Sidebar collapsible="icon" side="left" variant="sidebar" className="border-r">
           <SidebarHeader className="p-4">
@@ -274,10 +264,20 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
               </Link>
           </header>
           <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/40 min-h-[calc(100vh-3.5rem)] md:min-h-screen">
-            {React.isValidElement(children) ? React.cloneElement(children as React.ReactElement, { selectedLocationId: selectedLocation }) : children}
+            {children}
           </div>
         </SidebarInset>
       </SidebarProvider>
-    </QueryClientProvider>
   );
+}
+
+
+export function ClientLayoutWrapper({ children }: { children: React.ReactNode }) {
+    return (
+        <QueryClientProvider client={queryClient}>
+            <LocationProvider>
+                <LocationAwareLayout>{children}</LocationAwareLayout>
+            </LocationProvider>
+        </QueryClientProvider>
+    );
 }
