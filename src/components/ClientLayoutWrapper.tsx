@@ -2,7 +2,7 @@
 // src/components/ClientLayoutWrapper.tsx
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -80,11 +80,15 @@ const queryClient = new QueryClient();
 
 const useSelectedLocation = () => {
     const [selectedLocation, setSelectedLocation] = useState<string | null>(null);
+    const hasInitialized = useRef(false);
 
     useEffect(() => {
-        const storedLocation = sessionStorage.getItem('selectedLocationId');
-        if (storedLocation) {
-            setSelectedLocation(storedLocation);
+        if (!hasInitialized.current) {
+            const storedLocation = sessionStorage.getItem('selectedLocationId');
+            if (storedLocation) {
+                setSelectedLocation(storedLocation);
+            }
+            hasInitialized.current = true;
         }
     }, []);
 
@@ -95,9 +99,6 @@ const useSelectedLocation = () => {
             sessionStorage.removeItem('selectedLocationId');
         }
         setSelectedLocation(locationId);
-        // Using window.location.reload() is a simple way to ensure all components
-        // get the new location context. A more advanced solution might use a global state manager.
-        window.location.reload();
     };
 
     return [selectedLocation, setLocation] as const;
@@ -110,6 +111,8 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
   const [locations, setLocations] = useState<Location[]>([]);
   const [selectedLocation, setSelectedLocation] = useSelectedLocation();
   const { toast } = useToast();
+  
+  const locationsFetchedRef = useRef(false);
 
   useEffect(() => {
     if (!db) {
@@ -120,7 +123,6 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
 
     setIsSettingsLoading(true);
     const settingsDocRef = doc(db, 'appSettings', APP_SETTINGS_DOC_ID);
-    const locationsColRef = collection(db, LOCATIONS_COLLECTION);
     
     const unsubscribeSettings = onSnapshot(settingsDocRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -148,12 +150,12 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
 
     const fetchLocations = async () => {
         try {
+            const locationsColRef = collection(db, LOCATIONS_COLLECTION);
             const snapshot = await getDocs(locationsColRef);
             const fetchedLocations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location));
             setLocations(fetchedLocations);
-            // If no location is selected, and there are locations available, select the first one.
-            if (!selectedLocation && fetchedLocations.length > 0) {
-                // Use a functional update to avoid stale state issues if needed, though direct set is often fine here.
+
+            if (fetchedLocations.length > 0 && !sessionStorage.getItem('selectedLocationId')) {
                 setSelectedLocation(fetchedLocations[0].id);
             }
         } catch (error) {
@@ -166,10 +168,13 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
         }
     };
 
-    fetchLocations();
+    if (!locationsFetchedRef.current) {
+        fetchLocations();
+        locationsFetchedRef.current = true;
+    }
 
     return () => unsubscribeSettings(); 
-  }, [toast, selectedLocation, setSelectedLocation]);
+  }, [toast, setSelectedLocation]);
 
   const LocationSelector = () => (
     <div className="space-y-1 p-2">
@@ -190,7 +195,7 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
                         <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
                     ))
                 ) : (
-                    <SelectItem value="no-locations" disabled>No locations found</SelectItem>
+                    <SelectItem value="no-locations-placeholder" disabled>No locations found</SelectItem>
                 )}
             </SelectContent>
         </Select>
