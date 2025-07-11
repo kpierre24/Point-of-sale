@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import { collection, doc, setDoc, writeBatch } from 'firebase/firestore';
+import { collection, doc, setDoc, writeBatch, getDocs } from 'firebase/firestore';
 import type { Product, SoldProduct, Customer, User, BuiltProductRecipe, PurchaseOrder, TopUpCard, CardTransaction, AppSettings, Location } from '@/types';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { ArrowRight, Database, Info, Server, Sparkles } from 'lucide-react';
+import { ArrowRight, Database, Info, Server, Sparkles, Loader2 } from 'lucide-react';
 
 const LOCAL_STORAGE_KEYS = {
   products: 'pos-products',
@@ -95,7 +95,7 @@ export default function MigrateDataPage() {
       const batch = writeBatch(db);
       const productsCollection = collection(db, FIRESTORE_COLLECTIONS.products);
       
-      const locationsSnapshot = await collection(db, 'locations').get();
+      const locationsSnapshot = await getDocs(collection(db, 'locations'));
       const locationIds = locationsSnapshot.docs.map(doc => doc.id);
       
       newProductsSeed.forEach(productData => {
