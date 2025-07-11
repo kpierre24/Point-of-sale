@@ -48,7 +48,7 @@ export interface PurchaseOrder {
   locationId: string; // Added for location tracking
 }
 
-export const USER_ROLES = ["Front Staff", "Manager", "Owner", "Administrator"] as const;
+export const USER_ROLES = ["Front Staff", "Manager", "Owner", "Administrator", "Catering"] as const;
 export type UserRole = typeof USER_ROLES[number];
 
 // Represents the custom user profile stored locally

@@ -8,9 +8,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { collection, doc, setDoc, writeBatch } from 'firebase/firestore';
-import type { Product, SoldProduct, Customer, User, BuiltProductRecipe, PurchaseOrder, TopUpCard, CardTransaction, AppSettings } from '@/types';
+import type { Product, SoldProduct, Customer, User, BuiltProductRecipe, PurchaseOrder, TopUpCard, CardTransaction, AppSettings, Location } from '@/types';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { ArrowRight, Database, Info, Server } from 'lucide-react';
+import { ArrowRight, Database, Info, Server, Sparkles } from 'lucide-react';
 
 const LOCAL_STORAGE_KEYS = {
   products: 'pos-products',
@@ -36,7 +36,25 @@ const FIRESTORE_COLLECTIONS = {
   appSettings: 'appSettings', // Collection name
 };
 
+const newProductsSeed: Omit<Product, 'id' | 'stockByLocation'>[] = [
+  { name: "Fried Pie (Potato)", price: 12.00, category: "Bakery", costOfGoodsSold: 4.50 },
+  { name: "Fried Pie (Beef)", price: 12.00, category: "Bakery", costOfGoodsSold: 5.00 },
+  { name: "Cheese Twist", price: 10.00, category: "Bakery", costOfGoodsSold: 3.50 },
+  { name: "Chicken Pot Pie", price: 20.00, category: "Meals", costOfGoodsSold: 8.00 },
+  { name: "Spinach and Cheese Flaky Pie", price: 18.00, category: "Bakery", costOfGoodsSold: 7.00 },
+  { name: "Jamaican Patty", price: 20.00, category: "Savory", costOfGoodsSold: 7.50 },
+  { name: "Hotdog", price: 15.00, category: "Fast Food", costOfGoodsSold: 5.50 },
+  { name: "Beef Burger", price: 25.00, category: "Fast Food", costOfGoodsSold: 10.00 },
+  { name: "Chicken Burger", price: 25.00, category: "Fast Food", costOfGoodsSold: 9.50 },
+  { name: "Pizza (Slice)", price: 15.00, category: "Fast Food", costOfGoodsSold: 5.00 },
+  { name: "Pizza (Large)", price: 80.00, category: "Fast Food", costOfGoodsSold: 35.00 },
+  { name: "Tuna Sandwich", price: 15.00, category: "Sandwiches", costOfGoodsSold: 6.00 },
+  { name: "Chicken Sandwich", price: 15.00, category: "Sandwiches", costOfGoodsSold: 6.50 },
+  { name: "Cheese Sandwich", price: 15.00, category: "Sandwiches", costOfGoodsSold: 5.50 },
+];
+
 type MigrationStatus = 'idle' | 'migrating' | 'success' | 'error' | 'no-data';
+type SeedStatus = 'idle' | 'seeding' | 'success' | 'error';
 
 interface MigrationItem {
   key: keyof typeof LOCAL_STORAGE_KEYS;
@@ -59,11 +77,52 @@ export default function MigrateDataPage() {
     { key: 'cardTransactions', name: 'Card Transactions', status: 'idle', count: null },
     { key: 'appSettings', name: 'App Settings', status: 'idle', count: null },
   ]);
+  const [seedStatus, setSeedStatus] = useState<SeedStatus>('idle');
 
   const updateItemStatus = (key: keyof typeof LOCAL_STORAGE_KEYS, status: MigrationStatus, count?: number | null, error?: string) => {
     setMigrationItems(prev =>
       prev.map(item => (item.key === key ? { ...item, status, count: count === undefined ? item.count : count, error } : item))
     );
+  };
+
+  const handleSeedProducts = async () => {
+    if (!db) {
+      toast({ title: 'Firestore Error', description: 'Firebase Firestore is not initialized.', variant: 'destructive' });
+      return;
+    }
+    setSeedStatus('seeding');
+    try {
+      const batch = writeBatch(db);
+      const productsCollection = collection(db, FIRESTORE_COLLECTIONS.products);
+      
+      const locationsSnapshot = await collection(db, 'locations').get();
+      const locationIds = locationsSnapshot.docs.map(doc => doc.id);
+      
+      newProductsSeed.forEach(productData => {
+        const newDocRef = doc(productsCollection); // Auto-generate ID
+        
+        const stockByLocation: Record<string, number> = {};
+        if (locationIds.length > 0) {
+            // Give a default stock of 10 to the first location found
+            stockByLocation[locationIds[0]] = 10;
+        }
+
+        const newProduct: Product = {
+            ...productData,
+            id: newDocRef.id,
+            stockByLocation: stockByLocation,
+        };
+        batch.set(newDocRef, newProduct);
+      });
+
+      await batch.commit();
+      setSeedStatus('success');
+      toast({ title: 'Products Seeded', description: `${newProductsSeed.length} new products have been added to Firestore.` });
+    } catch (error: any) {
+      setSeedStatus('error');
+      console.error("Error seeding products:", error);
+      toast({ title: 'Seeding Error', description: error.message || 'An unknown error occurred.', variant: 'destructive' });
+    }
   };
 
   const migrateData = async (itemKey: keyof typeof LOCAL_STORAGE_KEYS) => {
@@ -88,7 +147,6 @@ export default function MigrateDataPage() {
       const data = JSON.parse(localDataString);
 
       if (itemKey === 'appSettings') {
-        // Special handling for appSettings (single object)
         const appSettingsData = data as AppSettings;
         if (typeof appSettingsData !== 'object' || appSettingsData === null) {
           throw new Error('App Settings data is not a valid object.');
@@ -98,7 +156,6 @@ export default function MigrateDataPage() {
         toast({ title: 'Migration Success', description: 'App Settings migrated successfully.' });
         updateItemStatus(itemKey, 'success', 1);
       } else {
-        // Handling for arrays of items
         const itemsArray = data as Array<any>;
         if (!Array.isArray(itemsArray)) {
           throw new Error('Data is not an array.');
@@ -112,16 +169,10 @@ export default function MigrateDataPage() {
         const batch = writeBatch(db);
         itemsArray.forEach(item => {
           if (!item.id) {
-            console.warn(`Item in ${localStorageKey} is missing an ID. Skipping or letting Firestore auto-generate. For this script, we assume ID exists.`);
-            // If IDs might be missing and you want Firestore to generate them:
-            // const newItemRef = doc(collection(db, firestoreCollectionName)); // Firestore auto-generates ID
-            // batch.set(newItemRef, item);
-            // For now, we'll assume IDs are present, as per typical local storage setup.
-            // If not, you might need to adjust or expect some items to fail if 'id' is crucial.
              throw new Error(`Item in ${localStorageKey} is missing an ID. Cannot migrate reliably without one using setDoc(doc(db, collection, item.id)).`);
           }
           const itemDocRef = doc(db, firestoreCollectionName, item.id);
-          batch.set(itemDocRef, item, { merge: true }); // merge: true to avoid data loss if doc exists
+          batch.set(itemDocRef, item, { merge: true });
         });
         await batch.commit();
         toast({ title: 'Migration Success', description: `${itemsArray.length} ${migrationItems.find(m=>m.key === itemKey)?.name} migrated successfully.` });
@@ -138,7 +189,6 @@ export default function MigrateDataPage() {
   
   const migrateAll = async () => {
     for (const item of migrationItems) {
-        // Only migrate if status is 'idle' or 'error' to allow re-trying failed ones
         if (item.status === 'idle' || item.status === 'error') {
             await migrateData(item.key);
         }
@@ -168,7 +218,23 @@ export default function MigrateDataPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Migration Status</CardTitle>
+          <CardTitle>Seed New Products</CardTitle>
+          <CardDescription>Click the button below to add a predefined list of new products to your Firestore database. This action is non-destructive and will not overwrite existing products.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={handleSeedProducts} disabled={seedStatus === 'seeding' || seedStatus === 'success'}>
+            {seedStatus === 'seeding' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {seedStatus === 'success' ? 'Products Added!' : 'Add New Products to Firestore'}
+            {seedStatus !== 'seeding' && <Sparkles className="ml-2 h-4 w-4" />}
+          </Button>
+          {seedStatus === 'error' && <p className="text-red-500 text-sm mt-2">An error occurred while seeding products. Please check the console.</p>}
+        </CardContent>
+      </Card>
+
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Local Storage to Firestore Migration</CardTitle>
           <CardDescription>Click buttons to migrate data for each category.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -230,4 +296,3 @@ export default function MigrateDataPage() {
     </div>
   );
 }
-
