@@ -1,9 +1,8 @@
-
 // src/components/topup-cards/ManageCardDialog.tsx
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import type { TopUpCard, CardTransaction } from '@/types';
+import type { TopUpCard, CardTransaction, PaymentMethod } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,13 +22,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCap
 import QRCodeStyling from 'qrcode.react';
 import { Download, DollarSign, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import { format } from 'date-fns';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PAYMENT_METHODS } from '@/config/constants';
+import { useLocation } from '@/context/LocationContext';
+
 
 interface ManageCardDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   card: TopUpCard | null;
   transactions: CardTransaction[];
-  onTopUp: (cardToUpdate: TopUpCard, amount: number, notes?: string) => void;
+  onTopUp: (cardToUpdate: TopUpCard, amount: number, notes?: string, paymentMethod?: PaymentMethod, locationId?: string) => void;
   onDeduct: (cardToUpdate: TopUpCard, amount: number, notes?: string) => boolean; // Returns true if successful
   onRefreshCardData?: (cardId: string) => void; // To refresh card data if needed
 }
@@ -44,29 +47,26 @@ export function ManageCardDialog({
   transactions,
   onTopUp,
   onDeduct,
-  onRefreshCardData, // This prop is available but its direct call from useEffect was problematic
+  onRefreshCardData, 
 }: ManageCardDialogProps) {
   const [topUpAmount, setTopUpAmount] = useState('');
   const [topUpNotes, setTopUpNotes] = useState('');
+  const [topUpPaymentMethod, setTopUpPaymentMethod] = useState<PaymentMethod>('Cash');
   const [deductAmount, setDeductAmount] = useState('');
   const [deductNotes, setDeductNotes] = useState('');
   const qrRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { selectedLocationId } = useLocation();
 
   useEffect(() => {
     if (isOpen) {
-      // Reset form fields when the dialog opens or the card being viewed changes
       setTopUpAmount('');
       setTopUpNotes('');
+      setTopUpPaymentMethod('Cash');
       setDeductAmount('');
       setDeductNotes('');
-      // The parent component (`TopUpCardsPage`) is responsible for ensuring the `card` 
-      // and `transactions` props are up-to-date when the dialog is opened
-      // or when a top-up/deduction occurs via `onTopUp`/`onDeduct` callbacks
-      // which then trigger `refreshCardDataForDialog` in the parent.
-      // Thus, calling `onRefreshCardData` here is likely redundant and can cause loops.
     }
-  }, [isOpen, card?.id]); // Effect runs when dialog opens or a different card is passed
+  }, [isOpen, card?.id]);
 
   if (!card) return null;
 
@@ -77,9 +77,14 @@ export function ManageCardDialog({
       toast({ title: 'Invalid Amount', description: 'Top-up amount must be positive.', variant: 'destructive' });
       return;
     }
-    onTopUp(card, amount, topUpNotes);
+     if (!selectedLocationId) {
+      toast({ title: "No Location", description: "A location must be selected to process a top-up.", variant: "destructive" });
+      return;
+    }
+    onTopUp(card, amount, topUpNotes, topUpPaymentMethod, selectedLocationId);
     setTopUpAmount('');
     setTopUpNotes('');
+    setTopUpPaymentMethod('Cash');
   };
 
   const handleDeductSubmit = (e: React.FormEvent) => {
@@ -93,8 +98,6 @@ export function ManageCardDialog({
     if (success) {
       setDeductAmount('');
       setDeductNotes('');
-    } else {
-       // onDeduct should handle its own toast for insufficient funds
     }
   };
   
@@ -156,6 +159,19 @@ export function ManageCardDialog({
                       <Input id="topUpAmount" type="number" value={topUpAmount} onChange={e => setTopUpAmount(e.target.value)} min="0.01" step="0.01" required />
                     </div>
                     <div>
+                      <Label htmlFor="topUpPaymentMethod">Payment Method</Label>
+                      <Select value={topUpPaymentMethod} onValueChange={(value: PaymentMethod) => setTopUpPaymentMethod(value)}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select method"/>
+                          </SelectTrigger>
+                          <SelectContent>
+                              {PAYMENT_METHODS.map(method => (
+                                  <SelectItem key={method} value={method}>{method}</SelectItem>
+                              ))}
+                          </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
                       <Label htmlFor="topUpNotes">Notes (Optional)</Label>
                       <Textarea id="topUpNotes" value={topUpNotes} onChange={e => setTopUpNotes(e.target.value)} placeholder="e.g., Cash deposit" />
                     </div>
@@ -189,9 +205,9 @@ export function ManageCardDialog({
                     <TableRow>
                       <TableHead>Date</TableHead>
                       <TableHead>Type</TableHead>
+                      <TableHead>Method</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
                       <TableHead className="text-right">New Balance</TableHead>
-                      <TableHead>Staff</TableHead>
                       <TableHead>Notes</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -200,11 +216,11 @@ export function ManageCardDialog({
                       <TableRow key={tx.id}>
                         <TableCell>{formatDate(tx.timestamp)}</TableCell>
                         <TableCell>{tx.type}</TableCell>
+                        <TableCell>{tx.paymentMethod || 'N/A'}</TableCell>
                         <TableCell className={`text-right ${tx.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                           {formatCurrency(tx.amount)}
                         </TableCell>
                         <TableCell className="text-right">{formatCurrency(tx.balanceAfter)}</TableCell>
-                        <TableCell>{tx.staffMember || 'N/A'}</TableCell>
                         <TableCell>{tx.notes || 'N/A'}</TableCell>
                       </TableRow>
                     ))}

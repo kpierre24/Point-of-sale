@@ -64,7 +64,7 @@ export interface User {
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 export type DiscountType = 'percentage' | 'fixed' | 'none';
 
-export interface SoldProduct {
+export interface Sale {
   id: string;
   name: string; 
   price: number; // Unit price
@@ -128,11 +128,13 @@ export interface CardTransaction {
   cardId: string; // Links to TopUpCard.cardId (the user-facing ID)
   timestamp: string; // ISO Date string
   type: 'Creation' | 'Top-Up' | 'Purchase' | 'Adjustment';
-  amount: number; // Positive for Top-Up/Creation, can be negative for Purchase/Adjustment if needed for flexibility, but UI will enforce positive for deduct
+  amount: number; // Positive for Top-Up/Creation, negative for Purchase
   balanceBefore: number;
   balanceAfter: number;
   staffMember?: string; // Name or ID of staff, optional
   notes?: string;
+  paymentMethod?: PaymentMethod;
+  locationId?: string;
 }
 
 // App Settings
@@ -155,4 +157,16 @@ export interface DailySalesData {
 export interface ProductCategorySalesData {
   category: string;
   quantitySold: number;
+}
+
+export interface Reconciliation {
+    id: string; // e.g., 'locationId-YYYY-MM-DD'
+    date: string; // YYYY-MM-DD
+    locationId: string;
+    expectedCash: number;
+    countedCash: number;
+    variance: number;
+    totalCashSales: number;
+    totalCashTopUps: number;
+    createdAt: string; // ISO timestamp
 }

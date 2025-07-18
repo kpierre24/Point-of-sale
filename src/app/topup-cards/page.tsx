@@ -3,7 +3,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import type { TopUpCard, CardTransaction, Customer } from '@/types';
+import type { TopUpCard, CardTransaction, Customer, PaymentMethod } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -183,7 +183,7 @@ export default function TopUpCardsPage() {
     setIsManageDialogOpen(true);
   };
 
-  const handleTopUp = useCallback((cardToUpdate: TopUpCard, amount: number, notes?: string) => {
+  const handleTopUp = useCallback((cardToUpdate: TopUpCard, amount: number, notes?: string, paymentMethod?: PaymentMethod, locationId?: string) => {
     if (!cardToUpdate) {
         toast({ title: 'Error', description: 'Card data is missing for top-up.', variant: 'destructive' });
         return;
@@ -199,6 +199,8 @@ export default function TopUpCardsPage() {
         balanceAfter: newBalance,
         staffMember: 'Staff User',
         notes,
+        paymentMethod,
+        locationId,
     };
     cardTransactionMutation.mutate({ cardToUpdate, transactionData, newBalance, type: 'Top-Up' });
   }, [toast, cardTransactionMutation]);

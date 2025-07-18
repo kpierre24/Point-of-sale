@@ -46,6 +46,7 @@ import {
   Database,
   MapPin,
   PackageCheck,
+  Landmark,
 } from 'lucide-react';
 import { LocationProvider, useLocation } from '@/context/LocationContext';
 
@@ -64,6 +65,7 @@ const navItems: NavItem[] = [
   { href: '/stock-take', icon: PackageCheck, label: 'Stock Take', tooltip: 'Initial Inventory Count' },
   { href: '/recipes', icon: ClipboardList, label: 'Recipes', tooltip: 'Manage Product Recipes/Builds' },
   { href: '/purchases', icon: Truck, label: 'Purchases', tooltip: 'Manage Stock Purchases' },
+  { href: '/cash-reconciliation', icon: Landmark, label: 'Reconciliation', tooltip: 'End-of-day Cash Reconciliation' },
   { href: '/customers', icon: Users, label: 'Customers', tooltip: 'Manage Customers' },
   { href: '/topup-cards', icon: CreditCard, label: 'Top-Up Cards', tooltip: 'Manage Customer Top-Up Cards' },
   { href: '/reports', icon: FileText, label: 'Reports', tooltip: 'View Business Reports' },
@@ -185,7 +187,9 @@ function LocationAwareLayout({ children }: { children: React.ReactNode }) {
 );
   
   const isSplashPage = pathname === '/';
-  if (isSplashPage) {
+  const isLookupPage = pathname.startsWith('/card-lookup');
+  
+  if (isSplashPage || isLookupPage) {
     return <>{children}</>;
   }
 
