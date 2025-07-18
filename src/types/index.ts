@@ -168,5 +168,17 @@ export interface Reconciliation {
     variance: number;
     totalCashSales: number;
     totalCashTopUps: number;
+    totalPettyCashIn: number;
+    totalPettyCashOut: number;
     createdAt: string; // ISO timestamp
+}
+
+export interface PettyCashTransaction {
+    id: string;
+    locationId: string;
+    timestamp: string; // ISO timestamp
+    type: 'in' | 'out';
+    amount: number;
+    reason: string;
+    staffMember?: string; // Optional
 }

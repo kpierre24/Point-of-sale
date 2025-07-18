@@ -47,6 +47,7 @@ import {
   MapPin,
   PackageCheck,
   Landmark,
+  DollarSign,
 } from 'lucide-react';
 import { LocationProvider, useLocation } from '@/context/LocationContext';
 
@@ -66,6 +67,7 @@ const navItems: NavItem[] = [
   { href: '/recipes', icon: ClipboardList, label: 'Recipes', tooltip: 'Manage Product Recipes/Builds' },
   { href: '/purchases', icon: Truck, label: 'Purchases', tooltip: 'Manage Stock Purchases' },
   { href: '/cash-reconciliation', icon: Landmark, label: 'Reconciliation', tooltip: 'End-of-day Cash Reconciliation' },
+  { href: '/petty-cash', icon: DollarSign, label: 'Petty Cash', tooltip: 'Manage Petty Cash' },
   { href: '/customers', icon: Users, label: 'Customers', tooltip: 'Manage Customers' },
   { href: '/topup-cards', icon: CreditCard, label: 'Top-Up Cards', tooltip: 'Manage Customer Top-Up Cards' },
   { href: '/reports', icon: FileText, label: 'Reports', tooltip: 'View Business Reports' },

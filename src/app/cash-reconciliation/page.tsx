@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo } from 'react';
-import type { Sale, CardTransaction, Location, Reconciliation } from '@/types';
+import type { Sale, CardTransaction, Location, Reconciliation, PettyCashTransaction } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,6 +23,7 @@ const SALES_COLLECTION = 'sales';
 const CARD_TRANSACTIONS_COLLECTION = 'cardTransactions';
 const LOCATIONS_COLLECTION = 'locations';
 const RECONCILIATIONS_COLLECTION = 'reconciliations';
+const PETTY_CASH_COLLECTION = 'pettyCashTransactions';
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 const formatDate = (date: Date) => format(date, 'yyyy-MM-dd');
@@ -56,15 +57,24 @@ const fetchTransactionsForDate = async (locationId: string, date: Date) => {
         where("timestamp", "<=", end.toISOString())
     );
 
-    const [salesSnapshot, topUpsSnapshot] = await Promise.all([
+    const pettyCashQuery = firestoreQuery(
+        collection(db, PETTY_CASH_COLLECTION),
+        where("locationId", "==", locationId),
+        where("timestamp", ">=", start.toISOString()),
+        where("timestamp", "<=", end.toISOString())
+    );
+
+    const [salesSnapshot, topUpsSnapshot, pettyCashSnapshot] = await Promise.all([
         getDocs(salesQuery),
-        getDocs(topUpsQuery)
+        getDocs(topUpsQuery),
+        getDocs(pettyCashQuery)
     ]);
 
     const cashSales = salesSnapshot.docs.map(doc => doc.data() as Sale);
     const cashTopUps = topUpsSnapshot.docs.map(doc => doc.data() as CardTransaction);
+    const pettyCashTransactions = pettyCashSnapshot.docs.map(doc => doc.data() as PettyCashTransaction);
     
-    return { cashSales, cashTopUps };
+    return { cashSales, cashTopUps, pettyCashTransactions };
 };
 
 export default function CashReconciliationPage() {
@@ -89,7 +99,10 @@ export default function CashReconciliationPage() {
     
     const totalCashSales = useMemo(() => transactions?.cashSales.reduce((sum, sale) => sum + sale.total, 0) || 0, [transactions]);
     const totalCashTopUps = useMemo(() => transactions?.cashTopUps.reduce((sum, topUp) => sum + topUp.amount, 0) || 0, [transactions]);
-    const expectedCash = totalCashSales + totalCashTopUps;
+    const totalPettyCashIn = useMemo(() => transactions?.pettyCashTransactions.filter(t => t.type === 'in').reduce((sum, t) => sum + t.amount, 0) || 0, [transactions]);
+    const totalPettyCashOut = useMemo(() => transactions?.pettyCashTransactions.filter(t => t.type === 'out').reduce((sum, t) => sum + t.amount, 0) || 0, [transactions]);
+
+    const expectedCash = (totalCashSales + totalCashTopUps + totalPettyCashIn) - totalPettyCashOut;
     const variance = useMemo(() => {
         if (countedCash === '') return NaN;
         return parseFloat(countedCash) - expectedCash;
@@ -130,6 +143,8 @@ export default function CashReconciliationPage() {
             variance: variance,
             totalCashSales: totalCashSales,
             totalCashTopUps: totalCashTopUps,
+            totalPettyCashIn: totalPettyCashIn,
+            totalPettyCashOut: totalPettyCashOut,
             createdAt: new Date().toISOString(),
         };
         reconciliationMutation.mutate(reconciliationData);
@@ -181,6 +196,8 @@ export default function CashReconciliationPage() {
                             <h3 className="font-semibold">Cash Summary</h3>
                             <div className="flex justify-between"><span>Total from Sales:</span> <span>{formatCurrency(totalCashSales)}</span></div>
                             <div className="flex justify-between"><span>Total from Top-Ups:</span> <span>{formatCurrency(totalCashTopUps)}</span></div>
+                            <div className="flex justify-between text-green-600"><span>Petty Cash In:</span> <span>{formatCurrency(totalPettyCashIn)}</span></div>
+                            <div className="flex justify-between text-red-600"><span>Petty Cash Out:</span> <span>- {formatCurrency(totalPettyCashOut)}</span></div>
                             <div className="flex justify-between text-lg font-bold border-t pt-2 mt-2"><span>Expected in Drawer:</span> <span>{formatCurrency(expectedCash)}</span></div>
                         </div>
 
@@ -223,7 +240,7 @@ export default function CashReconciliationPage() {
                         <ScrollArea className="h-[400px] border rounded-md">
                             <Table>
                                 <TableCaption>
-                                    {!transactions || (transactions.cashSales.length === 0 && transactions.cashTopUps.length === 0) ? "No cash transactions found." : "End of list."}
+                                    {!transactions || (transactions.cashSales.length === 0 && transactions.cashTopUps.length === 0 && transactions.pettyCashTransactions.length === 0) ? "No cash transactions found." : "End of list."}
                                 </TableCaption>
                                 <TableHeader>
                                     <TableRow>
@@ -239,7 +256,7 @@ export default function CashReconciliationPage() {
                                             <TableCell>{format(new Date(sale.timestamp), 'HH:mm')}</TableCell>
                                             <TableCell>Sale</TableCell>
                                             <TableCell>{sale.name} (x{sale.quantity})</TableCell>
-                                            <TableCell className="text-right">{formatCurrency(sale.total)}</TableCell>
+                                            <TableCell className="text-right text-green-600">{formatCurrency(sale.total)}</TableCell>
                                         </TableRow>
                                     ))}
                                     {transactions?.cashTopUps.map(topUp => (
@@ -247,7 +264,17 @@ export default function CashReconciliationPage() {
                                             <TableCell>{format(new Date(topUp.timestamp), 'HH:mm')}</TableCell>
                                             <TableCell>Top-Up</TableCell>
                                             <TableCell>Card: {topUp.cardId}</TableCell>
-                                            <TableCell className="text-right">{formatCurrency(topUp.amount)}</TableCell>
+                                            <TableCell className="text-right text-green-600">{formatCurrency(topUp.amount)}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {transactions?.pettyCashTransactions.map(tx => (
+                                        <TableRow key={`petty-${tx.id}`}>
+                                            <TableCell>{format(new Date(tx.timestamp), 'HH:mm')}</TableCell>
+                                            <TableCell>Petty Cash</TableCell>
+                                            <TableCell>{tx.reason}</TableCell>
+                                            <TableCell className={`text-right ${tx.type === 'in' ? 'text-green-600' : 'text-red-600'}`}>
+                                                {tx.type === 'in' ? formatCurrency(tx.amount) : `- ${formatCurrency(tx.amount)}`}
+                                            </TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
