@@ -6,9 +6,9 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where, startOfDay, endOfDay } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import type { Product, Sale, Location } from '@/types';
-import { format } from 'date-fns';
+import { format, startOfDay, endOfDay } from 'date-fns';
 
 const PRODUCTS_COLLECTION = 'products';
 const SALES_COLLECTION = 'sales';
