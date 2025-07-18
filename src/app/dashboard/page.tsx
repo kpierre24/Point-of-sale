@@ -14,6 +14,7 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, query as firestoreQuery, orderBy, limit } from 'firebase/firestore';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AskAssistant } from '@/components/AskAssistant';
 
 const PRODUCTS_COLLECTION = 'products';
 const CUSTOMERS_COLLECTION = 'customers';
@@ -81,7 +82,7 @@ export default function DashboardPage() {
     setTotalRevenue(revenue);
     setTotalSalesCount(sales.length);
 
-    const stockCount = products.filter(p => p.stockQuantity > 0).length; 
+    const stockCount = products.filter(p => p.stockByLocation && Object.values(p.stockByLocation).some(qty => qty > 0)).length;
     setProductsInStockCount(stockCount);
     setCustomerCount(customers.length);
 
@@ -233,11 +234,11 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle> 
-            <CardDescription>Overview of recent sales and stock movements.</CardDescription>
+            <CardTitle>Ask the Assistant</CardTitle> 
+            <CardDescription>Get quick answers about your business.</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">Detailed recent activity feed coming soon.</p>
+            <AskAssistant />
           </CardContent>
         </Card>
       </div>
