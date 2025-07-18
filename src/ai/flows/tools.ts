@@ -6,13 +6,16 @@
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import type { Product, Sale, Location } from '@/types';
+import { collection, getDocs, query, where, addDoc, doc, setDoc } from 'firebase/firestore';
+import type { Product, Sale, Location, Customer, TopUpCard } from '@/types';
 import { format, startOfDay, endOfDay } from 'date-fns';
+import { v4 as uuidv4 } from 'uuid';
 
 const PRODUCTS_COLLECTION = 'products';
 const SALES_COLLECTION = 'sales';
 const LOCATIONS_COLLECTION = 'locations';
+const CUSTOMERS_COLLECTION = 'customers';
+const TOPUP_CARDS_COLLECTION = 'topUpCards';
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
@@ -139,3 +142,51 @@ export const getLowStockProducts = ai.defineTool(
       return { lowStockSummary: `The following products are running low: ${summaryString}.` };
     }
   );
+
+export const addCustomer = ai.defineTool(
+    {
+        name: 'addCustomer',
+        description: 'Add a new customer to the database. This will also create a new top-up card for them automatically.',
+        inputSchema: z.object({
+            name: z.string().describe("The full name of the customer."),
+            email: z.string().optional().describe("The customer's email address."),
+            phone: z.string().optional().describe("The customer's phone number."),
+        }),
+        outputSchema: z.object({
+            message: z.string().describe('A confirmation message indicating the result of the operation.'),
+        }),
+    },
+    async ({ name, email, phone }) => {
+        if (!db) return { message: "Database is not available." };
+
+        try {
+            const customerId = uuidv4();
+            const newCustomer: Omit<Customer, 'id'> & { id: string } = {
+                id: customerId,
+                name,
+                email: email || '',
+                phone: phone || '',
+                address: '',
+            };
+            const customerRef = doc(db, CUSTOMERS_COLLECTION, customerId);
+            await setDoc(customerRef, newCustomer);
+
+            const newCardId = `CARD-${Date.now().toString().slice(-4)}${Math.random().toString().slice(2, 6)}`.toUpperCase();
+            const now = new Date().toISOString();
+            const newTopUpCard: Omit<TopUpCard, 'id'> = {
+              cardId: newCardId,
+              customerId: customerId,
+              currentBalance: 0,
+              qrCodeValue: newCardId,
+              createdAt: now,
+              lastUpdatedAt: now,
+            };
+            await addDoc(collection(db, TOPUP_CARDS_COLLECTION), newTopUpCard);
+
+            return { message: `Successfully added new customer '${name}' with card ID ${newCardId}.` };
+        } catch (error: any) {
+            console.error("Error adding customer via AI tool:", error);
+            return { message: `Failed to add customer. Error: ${error.message}` };
+        }
+    }
+);

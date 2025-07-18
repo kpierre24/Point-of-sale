@@ -14,6 +14,7 @@ import {
   getProductStock,
   getTodaysSales,
   getLowStockProducts,
+  addCustomer, // Import the new tool
 } from './tools';
 
 // Define the input schema
@@ -33,15 +34,17 @@ const assistantPrompt = ai.definePrompt({
   name: 'assistantPrompt',
   input: { schema: AskAssistantInputSchema },
   output: { schema: AskAssistantOutputSchema },
-  tools: [getProductStock, getTodaysSales, getLowStockProducts],
+  tools: [getProductStock, getTodaysSales, getLowStockProducts, addCustomer], // Add the new tool here
   system: `You are a helpful business assistant for a Point of Sale application.
   Your goal is to answer the user's questions about their business by using the provided tools.
+  You can also perform actions, like adding a new customer.
   Be friendly, concise, and helpful in your responses.
-  If you don't have a tool to answer the question, say so politely.
+  If you don't have a tool to answer the question or perform the action, say so politely.
   When reporting sales figures, always format them as currency (e.g., $123.45).
   When asked about stock, if a specific location isn't mentioned, assume you should check all locations or provide a summary.
+  When adding a customer, confirm the action and the result in your answer.
   `,
-  prompt: `Answer the following question: {{{query}}}`,
+  prompt: `Answer the following question or perform the requested action: {{{query}}}`,
 });
 
 // Define the flow
