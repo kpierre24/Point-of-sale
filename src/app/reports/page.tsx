@@ -2,14 +2,14 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import type { SoldProduct, User as AppUser, Location } from '@/types';
+import type { SoldProduct, User as AppUser, Location, Product } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, BarChartBig, UserSquare, CalendarDays, Loader2, MapPin } from "lucide-react";
+import { FileText, BarChartBig, UserSquare, CalendarDays, Loader2, MapPin, Package, DollarSign } from "lucide-react";
 import { format, parseISO, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval, getWeek, getYear } from 'date-fns';
 import { Label } from "@/components/ui/label";
 import { db } from '@/lib/firebase';
@@ -20,8 +20,9 @@ import { useToast } from '@/hooks/use-toast';
 const SALES_COLLECTION = 'sales';
 const USERS_COLLECTION = 'users';
 const LOCATIONS_COLLECTION = 'locations';
+const PRODUCTS_COLLECTION = 'products'; // Added
 
-type ReportType = 'staff' | 'daily' | 'weekly' | 'monthly' | '';
+type ReportType = 'staff' | 'daily' | 'weekly' | 'monthly' | 'product_performance' | 'profitability' | '';
 interface ReportDataItem {
   [key: string]: any;
 }
@@ -62,6 +63,12 @@ const fetchLocations = async (): Promise<Location[]> => {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location));
 };
 
+const fetchProducts = async (): Promise<Product[]> => {
+    if (!db) throw new Error("Firestore not available");
+    const snapshot = await getDocs(collection(db, PRODUCTS_COLLECTION));
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
+};
+
 
 export default function ReportsPage() {
   const { toast } = useToast();
@@ -86,10 +93,17 @@ export default function ReportsPage() {
       enabled: !!db,
   });
   
+  const { data: products = [], isLoading: isLoadingProducts, isError: isProductsError, error: productsError } = useQuery<Product[], Error>({
+      queryKey: [PRODUCTS_COLLECTION],
+      queryFn: fetchProducts,
+      enabled: !!db,
+  });
+  
   useEffect(() => {
     if (isStaffError) toast({ title: 'Error Loading Staff', description: staffError?.message, variant: 'destructive' });
     if (isLocationsError) toast({ title: 'Error Loading Locations', description: locationsError?.message, variant: 'destructive' });
-  }, [isStaffError, staffError, isLocationsError, locationsError, toast]);
+    if (isProductsError) toast({ title: 'Error Loading Products', description: productsError?.message, variant: 'destructive' });
+  }, [isStaffError, staffError, isLocationsError, locationsError, isProductsError, productsError, toast]);
 
 
   const getStaffName = (staffId?: string): string => {
@@ -200,6 +214,44 @@ export default function ReportsPage() {
             numberOfSales: aggregates.salesCount,
           })).sort((a, b) => new Date(parseISO(a.month)).getTime() - new Date(parseISO(b.month)).getTime());
           break;
+
+        case 'product_performance':
+          title = `Product Performance (${format(startDate || new Date(), 'MMM dd')} - ${format(endDate || new Date(), 'MMM dd, yyyy')})`;
+          const productSales: { [key: string]: { name: string; quantity: number; revenue: number } } = {};
+          filteredSales.forEach(sale => {
+              if (sale.productId) {
+                  if (!productSales[sale.productId]) {
+                      productSales[sale.productId] = { name: sale.name, quantity: 0, revenue: 0 };
+                  }
+                  productSales[sale.productId].quantity += sale.quantity;
+                  productSales[sale.productId].revenue += sale.total;
+              }
+          });
+          data = Object.values(productSales).map(p => ({
+              ...p,
+              avgPrice: p.quantity > 0 ? p.revenue / p.quantity : 0,
+          })).sort((a,b) => b.revenue - a.revenue);
+          break;
+
+        case 'profitability':
+            title = `Product Profitability (${format(startDate || new Date(), 'MMM dd')} - ${format(endDate || new Date(), 'MMM dd, yyyy')})`;
+            const productProfit: { [key: string]: { name: string; quantity: number; revenue: number; totalCost: number; } } = {};
+            filteredSales.forEach(sale => {
+                if (sale.productId && sale.costOfGoodsSoldAtTimeOfSale !== undefined) {
+                    if (!productProfit[sale.productId]) {
+                        productProfit[sale.productId] = { name: sale.name, quantity: 0, revenue: 0, totalCost: 0 };
+                    }
+                    productProfit[sale.productId].quantity += sale.quantity;
+                    productProfit[sale.productId].revenue += sale.total;
+                    productProfit[sale.productId].totalCost += (sale.costOfGoodsSoldAtTimeOfSale * sale.quantity);
+                }
+            });
+            data = Object.values(productProfit).map(p => ({
+                ...p,
+                profit: p.revenue - p.totalCost,
+                profitMargin: p.revenue > 0 ? ((p.revenue - p.totalCost) / p.revenue) * 100 : 0,
+            })).sort((a,b) => b.profit - a.profit);
+            break;
         }
         setGeneratedReportData(data);
         setReportTitle(title);
@@ -223,7 +275,7 @@ export default function ReportsPage() {
     if (generatedReportData.length === 0 && reportTitle && reportTitle !== 'Generating report...') return <p className="text-muted-foreground">No data available for this report.</p>;
     if (generatedReportData.length === 0) return null;
 
-    const headers: { key: string, label: string, type?: 'currency' | 'number' | 'string' }[] = [];
+    const headers: { key: string, label: string, type?: 'currency' | 'number' | 'string' | 'percentage' }[] = [];
     switch (reportType) {
       case 'staff':
         headers.push({ key: 'staffName', label: 'Staff Name' });
@@ -246,6 +298,20 @@ export default function ReportsPage() {
         headers.push({ key: 'totalSalesAmount', label: 'Total Sales', type: 'currency' });
         headers.push({ key: 'numberOfSales', label: 'No. of Sales', type: 'number' });
         break;
+      case 'product_performance':
+        headers.push({ key: 'name', label: 'Product Name' });
+        headers.push({ key: 'quantity', label: 'Units Sold', type: 'number' });
+        headers.push({ key: 'avgPrice', label: 'Avg. Price', type: 'currency' });
+        headers.push({ key: 'revenue', label: 'Total Revenue', type: 'currency' });
+        break;
+      case 'profitability':
+        headers.push({ key: 'name', label: 'Product Name' });
+        headers.push({ key: 'quantity', label: 'Units Sold', type: 'number' });
+        headers.push({ key: 'revenue', label: 'Total Revenue', type: 'currency' });
+        headers.push({ key: 'totalCost', label: 'Total COGS', type: 'currency' });
+        headers.push({ key: 'profit', label: 'Total Profit', type: 'currency' });
+        headers.push({ key: 'profitMargin', label: 'Profit Margin', type: 'percentage' });
+        break;
     }
 
     return (
@@ -253,15 +319,15 @@ export default function ReportsPage() {
         <Table>
           <TableHeader className="sticky top-0 bg-card z-10">
             <TableRow>
-              {headers.map(header => <TableHead key={header.key} className={header.type === 'currency' || header.type === 'number' ? 'text-right' : ''}>{header.label}</TableHead>)}
+              {headers.map(header => <TableHead key={header.key} className={['currency', 'number', 'percentage'].includes(header.type || '') ? 'text-right' : ''}>{header.label}</TableHead>)}
             </TableRow>
           </TableHeader>
           <TableBody>
             {generatedReportData.map((row, index) => (
               <TableRow key={index}>
                 {headers.map(header => (
-                  <TableCell key={header.key} className={header.type === 'currency' || header.type === 'number' ? 'text-right' : ''}>
-                    {header.type === 'currency' ? formatCurrency(row[header.key]) : row[header.key]}
+                  <TableCell key={header.key} className={['currency', 'number', 'percentage'].includes(header.type || '') ? 'text-right' : ''}>
+                    {header.type === 'currency' ? formatCurrency(row[header.key]) : header.type === 'percentage' ? `${row[header.key].toFixed(2)}%` : row[header.key]}
                   </TableCell>
                 ))}
               </TableRow>
@@ -272,7 +338,7 @@ export default function ReportsPage() {
     );
   };
   
-  if (isLoadingStaff || isLoadingLocations) {
+  if (isLoadingStaff || isLoadingLocations || isLoadingProducts) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -287,17 +353,17 @@ export default function ReportsPage() {
       <header className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight flex items-center">
           <BarChartBig className="mr-3 h-8 w-8 text-primary" />
-          Sales Reports
+          Business Reports
         </h1>
         <p className="text-muted-foreground text-md">
-          Generate and view sales reports by staff, or daily, weekly, and monthly summaries from Firestore.
+          Generate and view sales, product, and profitability reports from Firestore.
         </p>
       </header>
 
       <Card>
         <CardHeader>
           <CardTitle>Report Configuration</CardTitle>
-          <CardDescription>Select report type and filters to generate a sales report.</CardDescription>
+          <CardDescription>Select report type and filters to generate a report.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
@@ -312,6 +378,8 @@ export default function ReportsPage() {
                   <SelectItem value="daily"><CalendarDays className="inline-block mr-2 h-4 w-4" />Daily Summary</SelectItem>
                   <SelectItem value="weekly"><CalendarDays className="inline-block mr-2 h-4 w-4" />Weekly Summary</SelectItem>
                   <SelectItem value="monthly"><CalendarDays className="inline-block mr-2 h-4 w-4" />Monthly Summary</SelectItem>
+                  <SelectItem value="product_performance"><Package className="inline-block mr-2 h-4 w-4" />Product Performance</SelectItem>
+                  <SelectItem value="profitability"><DollarSign className="inline-block mr-2 h-4 w-4" />Product Profitability</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -348,7 +416,7 @@ export default function ReportsPage() {
               </div>
             )}
 
-            {(reportType === 'daily' || reportType === 'weekly' || reportType === 'monthly' || reportType === 'staff') && (
+            {(reportType) && (
               <>
                 <div>
                   <Label htmlFor="startDate">Start Date</Label>
