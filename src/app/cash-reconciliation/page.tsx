@@ -5,6 +5,7 @@ import { useState, useMemo } from 'react';
 import type { Sale, CardTransaction, Location, Reconciliation } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useToast } from '@/hooks/use-toast';
@@ -89,7 +90,10 @@ export default function CashReconciliationPage() {
     const totalCashSales = useMemo(() => transactions?.cashSales.reduce((sum, sale) => sum + sale.total, 0) || 0, [transactions]);
     const totalCashTopUps = useMemo(() => transactions?.cashTopUps.reduce((sum, topUp) => sum + topUp.amount, 0) || 0, [transactions]);
     const expectedCash = totalCashSales + totalCashTopUps;
-    const variance = parseFloat(countedCash) - expectedCash;
+    const variance = useMemo(() => {
+        if (countedCash === '') return NaN;
+        return parseFloat(countedCash) - expectedCash;
+    }, [countedCash, expectedCash]);
     
     const selectedLocationName = locations.find(l => l.id === selectedLocationId)?.name || "your selected location";
 
@@ -185,16 +189,16 @@ export default function CashReconciliationPage() {
                             <Input id="countedCash" type="number" placeholder="Enter total cash counted" value={countedCash} onChange={(e) => setCountedCash(e.target.value)} />
                         </div>
                         
-                        {countedCash !== '' && (
+                        {countedCash !== '' && !isNaN(variance) && (
                             <div className={`p-4 rounded-md ${variance === 0 ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
                                 <h3 className="font-semibold flex items-center">
-                                    {variance > 0 ? <TrendingUp className="mr-2 h-5 w-5 text-green-600"/> : <TrendingDown className="mr-2 h-5 w-5 text-red-600"/>}
+                                    {variance >= 0 ? <TrendingUp className="mr-2 h-5 w-5 text-green-600"/> : <TrendingDown className="mr-2 h-5 w-5 text-red-600"/>}
                                     Variance
                                 </h3>
                                 <p className={`text-2xl font-bold ${variance === 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
                                     {formatCurrency(variance)}
                                 </p>
-                                <p className="text-sm text-muted-foreground">{variance > 0 ? "Over" : "Short"}</p>
+                                <p className="text-sm text-muted-foreground">{variance > 0 ? "Over" : variance < 0 ? "Short" : "Balanced"}</p>
                             </div>
                         )}
 
