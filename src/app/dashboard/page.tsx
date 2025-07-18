@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { DollarSign, Package, Users, Loader2, ShoppingCart, WifiOff } from "lucide-react";
+import { DollarSign, Package, Users, Loader2, ShoppingCart, WifiOff, PackageCheck } from "lucide-react";
 import type { Product, Customer, SoldProduct, DailySalesData, ProductCategorySalesData } from '@/types';
 import { useRouter } from 'next/navigation';
 import { DailySalesChart } from '@/components/charts/DailySalesChart';
@@ -15,6 +15,8 @@ import { collection, getDocs, query as firestoreQuery, orderBy, limit } from 'fi
 import { useQuery } from '@tanstack/react-query';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AskAssistant } from '@/components/AskAssistant';
+import { useLocation } from '@/context/LocationContext';
+import Link from 'next/link';
 
 const PRODUCTS_COLLECTION = 'products';
 const CUSTOMERS_COLLECTION = 'customers';
@@ -47,6 +49,7 @@ const fetchSales = async (): Promise<SoldProduct[]> => {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { selectedLocationId } = useLocation();
   
   const { data: products = [], isLoading: isLoadingProducts, isError: isProductsError, error: productsError } = useQuery<Product[], Error>({
     queryKey: [PRODUCTS_COLLECTION],
@@ -73,6 +76,7 @@ export default function DashboardPage() {
   const [customerCount, setCustomerCount] = useState(0);
   const [dailySalesData, setDailySalesData] = useState<DailySalesData[]>([]);
   const [topCategoriesData, setTopCategoriesData] = useState<ProductCategorySalesData[]>([]);
+  const [showStockTakeAlert, setShowStockTakeAlert] = useState(false);
 
   useEffect(() => {
     if (isLoadingProducts || isLoadingCustomers || isLoadingSales || isProductsError || isCustomersError || isSalesError) return;
@@ -85,6 +89,16 @@ export default function DashboardPage() {
     const stockCount = products.filter(p => p.stockByLocation && Object.values(p.stockByLocation).some(qty => qty > 0)).length;
     setProductsInStockCount(stockCount);
     setCustomerCount(customers.length);
+
+    // Calculate total stock for the selected location
+    if (selectedLocationId && products.length > 0) {
+        const totalStockForLocation = products.reduce((sum, product) => {
+            return sum + (product.stockByLocation?.[selectedLocationId] || 0);
+        }, 0);
+        setShowStockTakeAlert(totalStockForLocation === 0);
+    } else {
+        setShowStockTakeAlert(false);
+    }
 
     const today = startOfDay(new Date());
     const last7DaysData: DailySalesData[] = [];
@@ -112,7 +126,7 @@ export default function DashboardPage() {
       
     setTopCategoriesData(sortedCategories.slice(0, 5));
 
-  }, [products, customers, sales, isLoadingProducts, isLoadingCustomers, isLoadingSales, isProductsError, isCustomersError, isSalesError]);
+  }, [products, customers, sales, isLoadingProducts, isLoadingCustomers, isLoadingSales, isProductsError, isCustomersError, isSalesError, selectedLocationId]);
 
 
   if (!db) { // Check for db initialization first
@@ -162,6 +176,19 @@ export default function DashboardPage() {
           Welcome! Here's an overview of your business activity from Firestore.
         </p>
       </header>
+
+      {showStockTakeAlert && (
+        <Alert>
+          <PackageCheck className="h-5 w-5" />
+          <AlertTitle>Set Up Your Inventory!</AlertTitle>
+          <AlertDescription>
+            It looks like this location has no stock recorded. Complete an initial stock take to start tracking your inventory accurately.
+            <Button asChild className="ml-4" size="sm">
+                <Link href="/stock-take">Start Stock Take</Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card>

@@ -45,6 +45,7 @@ import {
   Loader2, 
   Database,
   MapPin,
+  PackageCheck,
 } from 'lucide-react';
 import { LocationProvider, useLocation } from '@/context/LocationContext';
 
@@ -60,6 +61,7 @@ const navItems: NavItem[] = [
   { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', tooltip: 'Dashboard Overview' },
   { href: '/sales', icon: ShoppingCart, label: 'Sales', tooltip: 'Record and View Sales' },
   { href: '/products', icon: Package, label: 'Products', tooltip: 'Manage Products' },
+  { href: '/stock-take', icon: PackageCheck, label: 'Stock Take', tooltip: 'Initial Inventory Count' },
   { href: '/recipes', icon: ClipboardList, label: 'Recipes', tooltip: 'Manage Product Recipes/Builds' },
   { href: '/purchases', icon: Truck, label: 'Purchases', tooltip: 'Manage Stock Purchases' },
   { href: '/customers', icon: Users, label: 'Customers', tooltip: 'Manage Customers' },
