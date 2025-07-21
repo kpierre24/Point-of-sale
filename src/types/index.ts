@@ -24,6 +24,7 @@ export interface Customer {
   email?: string;
   phone?: string;
   address?: string; // Full address as a string for simplicity
+  createdAt?: string; // ISO Date string
 }
 
 export interface PurchaseOrderItem {
@@ -86,6 +87,9 @@ export interface Sale {
   staffName?: string; // Optional: Name of the staff member
   cardIdUsed?: string; // ID of the top-up card used for payment
 }
+
+// Type alias for backward compatibility
+export type SoldProduct = Sale;
 
 export interface ProductSuggestion {
   productName: string;

@@ -8,97 +8,129 @@ body {
 
 @layer base {
   :root {
-    --background: 0 0% 96%; /* Light Gray (#F5F5F5) */
-    --foreground: 220 15% 25%; /* Darker Gray-Blue for text - kept for contrast */
+    /* Professional Business Color Palette */
+    --background: 0 0% 98%; /* Clean white background */
+    --foreground: 215 25% 27%; /* Professional dark gray for text */
 
-    --muted: 0 0% 90%; /* Lighter muted gray */
-    --muted-foreground: 0 0% 45%; /* Muted text color - neutral gray */
+    --muted: 210 40% 96%; /* Light neutral background */
+    --muted-foreground: 215 16% 47%; /* Muted text color */
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 15% 25%;
+    --popover-foreground: 215 25% 27%;
 
-    --card: 0 0% 100%; /* White for cards */
-    --card-foreground: 220 15% 25%;
+    --card: 0 0% 100%; /* White cards with subtle shadows */
+    --card-foreground: 215 25% 27%;
 
-    --border: 0 0% 88%; /* Softer neutral gray border */
-    --input: 0 0% 88%; /* Input border to match general borders - neutral gray */
+    --border: 214 32% 91%; /* Subtle border color */
+    --input: 214 32% 91%; /* Input border matching general borders */
 
-    --primary: 122 39% 49%; /* Green for primary actions (#4CAF50) - Accent in PRD */
-    --primary-foreground: 0 0% 100%; /* White text on green */
+    /* Primary Business Blue (#1e40af - blue-700) */
+    --primary: 217 91% 40%; /* Professional business blue */
+    --primary-foreground: 0 0% 100%; /* White text on blue */
 
-    --secondary: 190 70% 93%; /* Light Blue for secondary elements (#E0F7FA) - Primary in PRD */
-    --secondary-foreground: 190 30% 30%; /* Darker blue for text on light blue */
+    /* Success Green (#059669 - emerald-600) */
+    --success: 160 84% 39%; /* Success green */
+    --success-foreground: 0 0% 100%; /* White text on green */
 
-    --accent: 190 70% 88%; /* Slightly more saturated light blue for accents (can also be green if desired) */
-    --accent-foreground: 190 30% 25%; /* Darker blue for text on accent */
+    /* Warning Amber (#d97706 - amber-600) */
+    --warning: 32 95% 44%; /* Warning amber */
+    --warning-foreground: 0 0% 100%; /* White text on amber */
 
-    --destructive: 0 72% 51%; /* Default destructive red */
-    --destructive-foreground: 0 0% 98%;
+    /* Error Red (#dc2626 - red-600) */
+    --destructive: 0 72% 51%; /* Error red */
+    --destructive-foreground: 0 0% 100%; /* White text on red */
 
-    --ring: 122 45% 55%; /* Green for focus rings */
+    /* Error state colors for form fields */
+    --error: 0 72% 51%; /* Error red */
+    --error-foreground: 0 0% 100%; /* White text on red */
+    --error-light: 0 72% 95%; /* Very light red background */
+    --error-border: 0 72% 70%; /* Error border color */
 
-    --radius: 0.5rem;
+    --secondary: 210 40% 96%; /* Light secondary background */
+    --secondary-foreground: 215 25% 27%; /* Dark text on light background */
 
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    --accent: 217 91% 95%; /* Very light blue accent */
+    --accent-foreground: 217 91% 40%; /* Primary blue text on light accent */
 
-    --sidebar-background: 0 0% 98%; /* Slightly off-white for sidebar, neutral */
-    --sidebar-foreground: 220 15% 25%;
-    --sidebar-primary: 122 39% 49%;
+    --ring: 217 91% 40%; /* Primary blue for focus rings */
+
+    --radius: 0.5rem; /* 8px border radius */
+
+    /* Professional chart colors */
+    --chart-1: 217 91% 40%; /* Primary blue */
+    --chart-2: 160 84% 39%; /* Success green */
+    --chart-3: 32 95% 44%; /* Warning amber */
+    --chart-4: 262 83% 58%; /* Purple */
+    --chart-5: 0 72% 51%; /* Error red */
+
+    /* Sidebar with professional styling */
+    --sidebar-background: 0 0% 100%; /* White sidebar */
+    --sidebar-foreground: 215 25% 27%;
+    --sidebar-primary: 217 91% 40%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 190 70% 93%;
-    --sidebar-accent-foreground: 190 30% 30%;
-    --sidebar-border: 0 0% 88%;
-    --sidebar-ring: 122 45% 55%;
+    --sidebar-accent: 217 91% 95%;
+    --sidebar-accent-foreground: 217 91% 40%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 217 91% 40%;
   }
 
   .dark {
-    --background: 220 15% 10%; /* Dark Gray-Blue background */
-    --foreground: 220 15% 90%; /* Light Gray-Blue text */
+    /* Professional Dark Mode Business Colors */
+    --background: 215 28% 9%; /* Dark professional background */
+    --foreground: 210 40% 95%; /* Light text for dark mode */
 
-    --muted: 220 15% 20%;
-    --muted-foreground: 220 10% 65%;
+    --muted: 215 28% 15%; /* Dark muted background */
+    --muted-foreground: 215 20% 65%; /* Muted text in dark mode */
 
-    --popover: 220 15% 10%;
-    --popover-foreground: 220 15% 90%;
+    --popover: 215 28% 9%;
+    --popover-foreground: 210 40% 95%;
 
-    --card: 220 15% 12%; /* Slightly lighter card background in dark mode */
-    --card-foreground: 220 15% 90%;
+    --card: 215 28% 12%; /* Dark card background */
+    --card-foreground: 210 40% 95%;
 
-    --border: 220 15% 25%;
-    --input: 220 15% 25%;
+    --border: 215 28% 20%; /* Dark border */
+    --input: 215 28% 20%; /* Dark input border */
 
-    --primary: 122 39% 55%; /* Slightly lighter Green for primary actions in dark */
-    --primary-foreground: 0 0% 100%;
+    /* Primary Business Blue (lighter for dark mode) */
+    --primary: 217 91% 60%; /* Lighter business blue for dark mode */
+    --primary-foreground: 215 28% 9%; /* Dark text on light blue */
 
-    --secondary: 190 40% 30%; /* Darker Light Blue for secondary elements */
-    --secondary-foreground: 190 70% 93%;
+    /* Success Green (adjusted for dark mode) */
+    --success: 160 84% 50%; /* Slightly lighter success green */
+    --success-foreground: 215 28% 9%; /* Dark text on green */
 
-    --accent: 190 40% 35%; /* Darker accent */
-    --accent-foreground: 190 70% 93%;
+    /* Warning Amber (adjusted for dark mode) */
+    --warning: 32 95% 55%; /* Slightly lighter warning amber */
+    --warning-foreground: 215 28% 9%; /* Dark text on amber */
 
-    --destructive: 0 65% 55%;
-    --destructive-foreground: 0 0% 98%;
+    /* Error Red (adjusted for dark mode) */
+    --destructive: 0 72% 60%; /* Slightly lighter error red */
+    --destructive-foreground: 210 40% 95%; /* Light text on red */
 
-    --ring: 122 45% 60%;
+    --secondary: 215 28% 15%; /* Dark secondary background */
+    --secondary-foreground: 210 40% 95%; /* Light text on dark background */
 
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    --accent: 217 91% 20%; /* Dark blue accent */
+    --accent-foreground: 217 91% 60%; /* Light blue text on dark accent */
 
-    --sidebar-background: 220 15% 12%;
-    --sidebar-foreground: 220 15% 90%;
-    --sidebar-primary: 122 39% 55%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 190 40% 30%;
-    --sidebar-accent-foreground: 190 70% 93%;
-    --sidebar-border: 220 15% 25%;
-    --sidebar-ring: 122 45% 60%;
+    --ring: 217 91% 60%; /* Light blue for focus rings in dark mode */
+
+    /* Professional dark mode chart colors */
+    --chart-1: 217 91% 60%; /* Primary blue */
+    --chart-2: 160 84% 50%; /* Success green */
+    --chart-3: 32 95% 55%; /* Warning amber */
+    --chart-4: 262 83% 68%; /* Purple */
+    --chart-5: 0 72% 60%; /* Error red */
+
+    /* Dark sidebar styling */
+    --sidebar-background: 215 28% 12%;
+    --sidebar-foreground: 210 40% 95%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 215 28% 9%;
+    --sidebar-accent: 217 91% 20%;
+    --sidebar-accent-foreground: 217 91% 60%;
+    --sidebar-border: 215 28% 20%;
+    --sidebar-ring: 217 91% 60%;
   }
 }
 
@@ -106,11 +138,266 @@ body {
   * {
     @apply border-border;
   }
+  
   body {
     @apply bg-background text-foreground;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
+
+  /* Enhanced Typography Hierarchy */
+  h1 {
+    @apply text-3xl font-bold tracking-tight;
+    line-height: 1.2;
+  }
+  
+  h2 {
+    @apply text-2xl font-semibold tracking-tight;
+    line-height: 1.3;
+  }
+  
+  h3 {
+    @apply text-xl font-semibold;
+    line-height: 1.4;
+  }
+  
+  h4 {
+    @apply text-lg font-medium;
+    line-height: 1.5;
+  }
+
+  /* Business-focused component base styles */
+  .metric-display {
+    @apply text-metric text-foreground font-bold tabular-nums;
+  }
+  
+  .card-title {
+    @apply text-card-title text-card-foreground;
+  }
+  
+  .form-label {
+    @apply text-form-label text-foreground font-medium;
+  }
+
+  /* Professional button base styles with micro-interactions */
+  button {
+    @apply min-h-button;
+    @apply transition-all duration-200 ease-in-out;
+    @apply transform-gpu;
+  }
+  
+  button:hover {
+    @apply scale-[1.02];
+  }
+  
+  button:active {
+    @apply scale-[0.98];
+  }
+  
+  @media (pointer: coarse) {
+    button {
+      @apply min-h-touch-target;
+    }
+  }
+
+  /* Touch-friendly spacing for interactive elements */
+  @media (pointer: coarse) {
+    .touch-spacing {
+      @apply space-y-4; /* Increased spacing between touch elements */
+    }
+    
+    .touch-padding {
+      @apply p-4; /* Increased padding for touch areas */
+    }
+    
+    .touch-gap {
+      @apply gap-4; /* Increased gap between touch elements */
+    }
+  }
+
+  /* Enhanced form elements with micro-interactions */
+  input, select, textarea {
+    @apply transition-all duration-200 ease-in-out;
+    @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2;
+    @apply transform-gpu;
+  }
+  
+  input:hover, select:hover, textarea:hover {
+    @apply shadow-sm;
+  }
+  
+  input:focus, select:focus, textarea:focus {
+    @apply shadow-md scale-[1.01];
+  }
+
+  /* Professional table styling */
+  table {
+    @apply w-full border-collapse;
+  }
+  
+  th {
+    @apply text-left font-medium text-muted-foreground;
+    @apply border-b border-border;
+    @apply py-3 px-4;
+  }
+  
+  td {
+    @apply border-b border-border;
+    @apply py-3 px-4;
+  }
+
+  /* Card component base styling */
+  .card {
+    @apply bg-card text-card-foreground;
+    @apply border border-border rounded-lg;
+    @apply shadow-card;
+    @apply p-card-padding;
+  }
+
+  .card:hover {
+    @apply shadow-card-hover;
+  }
+
+  /* Status indicators */
+  .status-success {
+    @apply bg-success text-success-foreground;
+  }
+  
+  .status-warning {
+    @apply bg-warning text-warning-foreground;
+  }
+  
+  .status-error {
+    @apply bg-destructive text-destructive-foreground;
+  }
+
+  /* Error state styling for form elements */
+  .error-input {
+    @apply border-red-300 focus:border-red-500 focus:ring-red-500;
+  }
+  
+  .error-text {
+    @apply text-red-600 text-sm;
+  }
+  
+  .error-icon {
+    @apply text-red-500;
+  }
+
+  /* Success state styling for form elements */
+  .success-input {
+    @apply border-green-300 focus:border-green-500 focus:ring-green-500;
+  }
+  
+  .success-text {
+    @apply text-green-600 text-sm;
+  }
+  
+  .success-icon {
+    @apply text-green-500;
+  }
+
+  /* Error display components */
+  .error-alert {
+    @apply border-red-200 bg-red-50 text-red-900;
+  }
+  
+  .warning-alert {
+    @apply border-amber-200 bg-amber-50 text-amber-900;
+  }
+  
+  .info-alert {
+    @apply border-blue-200 bg-blue-50 text-blue-900;
+  }
+  
+  .success-alert {
+    @apply border-green-200 bg-green-50 text-green-900;
+  }
+
+  /* Micro-interaction utility classes */
+  .animate-fade-in {
+    animation: fade-in 0.3s ease-out;
+  }
+  
+  .animate-fade-out {
+    animation: fade-out 0.2s ease-in;
+  }
+  
+  .animate-slide-in-right {
+    animation: slide-in-right 0.3s ease-out;
+  }
+  
+  .animate-scale-in {
+    animation: scale-in 0.2s ease-out;
+  }
+  
+  .animate-gentle-bounce {
+    animation: gentle-bounce 1s ease-in-out infinite;
+  }
+  
+  .animate-subtle-pulse {
+    animation: subtle-pulse 2s ease-in-out infinite;
+  }
+
+  /* Interactive element enhancements */
+  .interactive-element {
+    @apply transition-all duration-200 ease-in-out transform-gpu;
+  }
+  
+  .interactive-element:hover {
+    @apply scale-[1.02] shadow-md;
+  }
+  
+  .interactive-element:active {
+    @apply scale-[0.98];
+  }
+
+  /* Loading state animations */
+  .loading-shimmer {
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+  }
+
+  /* Smooth page transitions */
+  .page-transition-enter {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  
+  .page-transition-enter-active {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+  }
+  
+  .page-transition-exit {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  
+  .page-transition-exit-active {
+    opacity: 0;
+    transform: translateY(-20px);
+    transition: opacity 0.2s ease-in, transform 0.2s ease-in;
+  }
+
+  /* Enhanced focus states for accessibility */
+  .focus-visible-enhanced:focus-visible {
+    @apply ring-2 ring-ring ring-offset-2 ring-offset-background;
+    @apply outline-none;
+    @apply scale-[1.02];
+    transition: all 0.2s ease-in-out;
+  }
+
+  /* Staggered animation delays for lists */
+  .stagger-animation:nth-child(1) { animation-delay: 0ms; }
+  .stagger-animation:nth-child(2) { animation-delay: 100ms; }
+  .stagger-animation:nth-child(3) { animation-delay: 200ms; }
+  .stagger-animation:nth-child(4) { animation-delay: 300ms; }
+  .stagger-animation:nth-child(5) { animation-delay: 400ms; }
+  .stagger-animation:nth-child(6) { animation-delay: 500ms; }
 }
 
 @media print {

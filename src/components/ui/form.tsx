@@ -86,16 +86,22 @@ const FormItem = React.forwardRef<
 })
 FormItem.displayName = "FormItem"
 
+export interface FormLabelProps extends React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root> {
+  required?: boolean
+}
+
 const FormLabel = React.forwardRef<
   React.ElementRef<typeof LabelPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>
->(({ className, ...props }, ref) => {
+  FormLabelProps
+>(({ className, required, ...props }, ref) => {
   const { error, formItemId } = useFormField()
 
   return (
     <Label
       ref={ref}
-      className={cn(error && "text-destructive", className)}
+      variant={error ? "error" : "default"}
+      required={required}
+      className={className}
       htmlFor={formItemId}
       {...props}
     />
@@ -142,10 +148,14 @@ const FormDescription = React.forwardRef<
 })
 FormDescription.displayName = "FormDescription"
 
+export interface FormMessageProps extends React.HTMLAttributes<HTMLParagraphElement> {
+  variant?: "error" | "success" | "warning" | "info"
+}
+
 const FormMessage = React.forwardRef<
   HTMLParagraphElement,
-  React.HTMLAttributes<HTMLParagraphElement>
->(({ className, children, ...props }, ref) => {
+  FormMessageProps
+>(({ className, children, variant, ...props }, ref) => {
   const { error, formMessageId } = useFormField()
   const body = error ? String(error?.message ?? "") : children
 
@@ -153,11 +163,24 @@ const FormMessage = React.forwardRef<
     return null
   }
 
+  const variantClasses = {
+    error: "text-destructive",
+    success: "text-success",
+    warning: "text-warning",
+    info: "text-muted-foreground",
+  }
+
+  const computedVariant = error ? "error" : variant || "error"
+
   return (
     <p
       ref={ref}
       id={formMessageId}
-      className={cn("text-sm font-medium text-destructive", className)}
+      className={cn(
+        "text-sm font-medium flex items-start gap-1.5 mt-1",
+        variantClasses[computedVariant],
+        className
+      )}
       {...props}
     >
       {body}

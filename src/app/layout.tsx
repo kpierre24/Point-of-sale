@@ -5,6 +5,8 @@ import './globals.css';
 import { APP_TITLE } from '@/config/constants';
 import { Toaster } from '@/components/ui/toaster';
 import { ClientLayoutWrapper } from '@/components/ClientLayoutWrapper';
+import { ThemeProvider } from '@/hooks/use-theme';
+import { NotificationProvider } from '@/hooks/use-notifications';
 import React from 'react';
 
 export const metadata: Metadata = {
@@ -21,10 +23,14 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${GeistSans.variable}`}>
       <body className={`font-sans antialiased`}>
-        <ClientLayoutWrapper>
-          {children}
-        </ClientLayoutWrapper>
-        <Toaster />
+        <ThemeProvider>
+          <NotificationProvider>
+            <ClientLayoutWrapper>
+              {children}
+            </ClientLayoutWrapper>
+            <Toaster />
+          </NotificationProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

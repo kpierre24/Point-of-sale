@@ -184,9 +184,94 @@ function useToast() {
     }
   }, [state])
 
+  // Enhanced toast methods for business use cases
+  const success = (title: string, description?: string) => {
+    return toast({
+      title,
+      description,
+      variant: "success",
+    })
+  }
+
+  const error = (title: string, description?: string) => {
+    return toast({
+      title,
+      description,
+      variant: "destructive",
+    })
+  }
+
+  const warning = (title: string, description?: string) => {
+    return toast({
+      title,
+      description,
+      variant: "warning",
+    })
+  }
+
+  const info = (title: string, description?: string) => {
+    return toast({
+      title,
+      description,
+      variant: "info",
+    })
+  }
+
+  // Business-specific toast patterns
+  const saveSuccess = (itemName: string = "Item") => {
+    return success(
+      `${itemName} Saved`,
+      `${itemName} has been successfully saved.`
+    )
+  }
+
+  const deleteSuccess = (itemName: string = "Item") => {
+    return success(
+      `${itemName} Deleted`,
+      `${itemName} has been successfully deleted.`
+    )
+  }
+
+  const saveError = (itemName: string = "Item", error?: string) => {
+    return toast({
+      title: `Failed to Save ${itemName}`,
+      description: error || `There was an error saving the ${itemName.toLowerCase()}. Please try again.`,
+      variant: "destructive",
+    })
+  }
+
+  const networkError = () => {
+    return error(
+      "Connection Error",
+      "Unable to connect to the server. Please check your internet connection and try again."
+    )
+  }
+
+  const validationError = (message: string = "Please check your input and try again.") => {
+    return warning("Validation Error", message)
+  }
+
+  const loadingToast = (message: string = "Processing...") => {
+    return toast({
+      title: message,
+      description: "Please wait while we process your request.",
+      variant: "default",
+    })
+  }
+
   return {
     ...state,
     toast,
+    success,
+    error,
+    warning,
+    info,
+    saveSuccess,
+    deleteSuccess,
+    saveError,
+    networkError,
+    validationError,
+    loadingToast,
     dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
   }
 }

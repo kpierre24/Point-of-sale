@@ -19,6 +19,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { PlusCircle, Edit, Trash2, Image as ImageIcon, Download, Loader2, WifiOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
+import { StockIndicator, CompactStockIndicator } from '@/components/ui/stock-indicator';
+import { CategoryBadge } from '@/components/ui/category-badge';
+import { ProductImage } from '@/components/ui/product-image';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,6 +38,14 @@ import { collection, getDocs, doc, setDoc, deleteDoc, orderBy, query as firestor
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useLocation } from '@/context/LocationContext';
+import { AdvancedSearch } from '@/components/ui/advanced-search';
+import { BulkActionsToolbar, commonBulkActions } from '@/components/ui/bulk-actions-toolbar';
+import { DataExportDialog } from '@/components/ui/data-export-dialog';
+import { useAdvancedSearch } from '@/hooks/use-advanced-search';
+import { useBulkSelection } from '@/hooks/use-bulk-selection';
+import { useNotifications } from '@/hooks/use-notifications';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ProtectedComponent, PERMISSIONS } from '@/hooks/use-permissions';
 
 const PRODUCTS_COLLECTION = 'products';
 const RECIPES_COLLECTION = 'recipes';
@@ -68,10 +79,10 @@ const fetchRecipes = async (): Promise<BuiltProductRecipe[]> => {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BuiltProductRecipe));
 };
 
-const fetchLocations = async () => {
+const fetchLocations = async (): Promise<Location[]> => {
     if (!db) throw new Error("Firestore not available");
     const snapshot = await getDocs(collection(db, LOCATIONS_COLLECTION));
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location));
 };
 
 export default function ProductsPage() {
@@ -80,6 +91,7 @@ export default function ProductsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { selectedLocationId } = useLocation();
+  const { addNotification } = useNotifications();
 
   const { data: products = [], isLoading: isLoadingProducts, isError: isProductsError, error: productsError } = useQuery<Product[], Error>({
     queryKey: [PRODUCTS_COLLECTION],
@@ -95,11 +107,101 @@ export default function ProductsPage() {
     retry: false,
   });
 
-  const { data: locations = [], isLoading: isLoadingLocations, isError: isLocationsError, error: locationsError } = useQuery({
+  const { data: locations = [], isLoading: isLoadingLocations, isError: isLocationsError, error: locationsError } = useQuery<Location[], Error>({
     queryKey: [LOCATIONS_COLLECTION],
     queryFn: fetchLocations,
     enabled: !!db,
+    retry: false,
   });
+
+  // Advanced search and filtering
+  const searchFilters = [
+    {
+      id: "category",
+      label: "Category",
+      type: "select" as const,
+      options: [
+        ...Array.from(new Set(products.map(p => p.category).filter(Boolean))).map(cat => ({
+          value: cat!,
+          label: cat!
+        }))
+      ],
+      value: "",
+    },
+    {
+      id: "price",
+      label: "Max Price",
+      type: "number" as const,
+      value: "",
+    },
+  ];
+
+  const {
+    query,
+    setQuery,
+    filters,
+    updateFilter,
+    clearFilters,
+    filteredItems: filteredProducts,
+    savedSearches,
+    saveSearch,
+    loadSearch,
+    deleteSearch,
+    hasActiveFilters,
+    resultCount,
+  } = useAdvancedSearch({
+    items: products,
+    searchFields: ["name", "category", "description"],
+    filters: searchFilters,
+  });
+
+  // Bulk selection
+  const {
+    selectedItems,
+    selectedCount,
+    totalCount,
+    isSelected,
+    toggleItem,
+    clearSelection,
+    toggleAll,
+    isAllSelected,
+    isPartiallySelected,
+  } = useBulkSelection({
+    items: filteredProducts,
+    getItemId: (item) => item.id,
+  });
+
+  // Bulk actions
+  const bulkActions = [
+    commonBulkActions.delete(() => {
+      addNotification({
+        title: "Bulk Delete",
+        message: `${selectedCount} products would be deleted`,
+        type: "warning",
+      });
+      // Here you would implement actual bulk delete
+      clearSelection();
+    }),
+    commonBulkActions.export(() => {
+      addNotification({
+        title: "Bulk Export",
+        message: `Exporting ${selectedCount} selected products`,
+        type: "info",
+      });
+      // Here you would implement bulk export of selected items
+    }),
+  ];
+
+  // Export fields for DataExportDialog
+  const exportFields = [
+    { key: "id", label: "Product ID", type: "string" as const, required: true },
+    { key: "name", label: "Product Name", type: "string" as const, required: true },
+    { key: "description", label: "Description", type: "string" as const },
+    { key: "price", label: "Price", type: "number" as const },
+    { key: "costOfGoodsSold", label: "Cost of Goods Sold", type: "number" as const },
+    { key: "category", label: "Category", type: "string" as const },
+    { key: "imageUrl", label: "Image URL", type: "string" as const },
+  ];
   
   useEffect(() => {
     if (isProductsError && productsError) {
@@ -109,7 +211,7 @@ export default function ProductsPage() {
       toast({ title: 'Error Loading Recipes', description: recipesError?.message || 'Could not fetch recipes.', variant: 'destructive' });
     }
     if (isLocationsError && locationsError) {
-        toast({ title: 'Error Loading Locations', description: (locationsError as Error)?.message || 'Could not fetch locations.', variant: 'destructive' });
+        toast({ title: 'Error Loading Locations', description: locationsError?.message || 'Could not fetch locations.', variant: 'destructive' });
     }
   }, [isProductsError, productsError, isRecipesError, recipesError, isLocationsError, locationsError, toast]);
 
@@ -240,22 +342,29 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-8">
-      <header className="flex items-center justify-between mb-8">
-        <div>
-            <h1 className="text-3xl font-bold tracking-tight">Product Management</h1>
-            <p className="text-muted-foreground text-md">
-            Add, view, edit, and manage your product inventory using Firestore.
-            </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Button onClick={handleExportProducts} variant="outline" disabled={products.length === 0}>
-            <Download className="mr-2 h-4 w-4" />
-            Export Products
-          </Button>
-          <Button onClick={handleAddNewProduct} disabled={productMutation.isPending}>
-            <PlusCircle className="mr-2 h-4 w-4" />
-            Add Product
-          </Button>
+      {/* Responsive Header */}
+      <header className="mb-8">
+        <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+          <div>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Product Management</h1>
+              <p className="text-muted-foreground text-sm sm:text-md">
+              Add, view, edit, and manage your product inventory using Firestore.
+              </p>
+          </div>
+          <div className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-2">
+            <ProtectedComponent requiredPermissions={[PERMISSIONS.REPORTS_EXPORT]}>
+              <Button onClick={handleExportProducts} variant="outline" disabled={products.length === 0} size="lg" className="w-full sm:w-auto">
+                <Download className="mr-2 h-4 w-4" />
+                Export Products
+              </Button>
+            </ProtectedComponent>
+            <ProtectedComponent requiredPermissions={[PERMISSIONS.PRODUCTS_CREATE]}>
+              <Button onClick={handleAddNewProduct} disabled={productMutation.isPending} size="lg" className="w-full sm:w-auto">
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Add Product
+              </Button>
+            </ProtectedComponent>
+          </div>
         </div>
       </header>
 
@@ -268,84 +377,160 @@ export default function ProductsPage() {
         locations={locations}
       />
 
+      {/* Enhanced Search and Filtering */}
       <Card>
         <CardHeader>
-          <CardTitle>Product List</CardTitle>
+          <CardTitle className="flex items-center justify-between">
+            Advanced Product Search
+            <DataExportDialog
+              data={filteredProducts}
+              fields={exportFields}
+              title="Export Products"
+              defaultFilename="products_export"
+              trigger={
+                <Button variant="outline" size="sm">
+                  <Download className="mr-2 h-4 w-4" />
+                  Export Filtered
+                </Button>
+              }
+            />
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AdvancedSearch
+            query={query}
+            onQueryChange={setQuery}
+            filters={filters}
+            onFilterChange={updateFilter}
+            onClearFilters={clearFilters}
+            savedSearches={savedSearches}
+            onSaveSearch={saveSearch}
+            onLoadSearch={loadSearch}
+            onDeleteSearch={deleteSearch}
+            hasActiveFilters={hasActiveFilters}
+            resultCount={resultCount}
+            totalCount={products.length}
+            placeholder="Search products by name, category, or description..."
+          />
+        </CardContent>
+      </Card>
+
+      {/* Bulk Actions Toolbar */}
+      <BulkActionsToolbar
+        selectedCount={selectedCount}
+        totalCount={totalCount}
+        onClearSelection={clearSelection}
+        actions={bulkActions}
+      />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            Product List
+            <div className="text-sm text-muted-foreground">
+              {`Displaying stock for: ${displayLocationName}`}
+            </div>
+          </CardTitle>
           <CardDescription>
-            {`Displaying stock for: ${displayLocationName}. You have ${products.length} total product(s).`}
+            {`Showing ${resultCount} of ${products.length} products`}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <ScrollArea className="h-[500px] rounded-md border shadow-inner">
             <Table>
-              {products.length === 0 && <TableCaption>No products available.</TableCaption>}
+              {filteredProducts.length === 0 && <TableCaption>No products match your search criteria.</TableCaption>}
               <TableHeader className="sticky top-0 bg-card z-10">
                 <TableRow>
+                  <TableHead className="w-[50px]">
+                    <Checkbox
+                      checked={isAllSelected}
+                      onCheckedChange={toggleAll}
+                      aria-label="Select all products"
+                    />
+                  </TableHead>
                   <TableHead className="w-[80px]">Image</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead className="text-right">Cost Price</TableHead>
                   <TableHead className="text-right">Selling Price</TableHead>
-                  <TableHead className="text-right">{selectedLocationId ? 'Stock' : 'Total Stock'}</TableHead>
+                  <TableHead className="text-left">{selectedLocationId ? 'Stock Status' : 'Total Stock Status'}</TableHead>
                   <TableHead className="text-center w-[120px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {products.map((product) => (
-                  <TableRow key={product.id}>
-                    <TableCell>
-                      {product.imageUrl ? (
-                        <Image
+                {filteredProducts.map((product) => {
+                  const stockLevel = getStockForDisplay(product);
+                  return (
+                    <TableRow 
+                      key={product.id}
+                      className={isSelected(product) ? "bg-muted/50" : ""}
+                    >
+                      <TableCell>
+                        <Checkbox
+                          checked={isSelected(product)}
+                          onCheckedChange={() => toggleItem(product)}
+                          aria-label={`Select ${product.name}`}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <ProductImage
                           src={product.imageUrl}
                           alt={product.name}
-                          width={50}
-                          height={50}
-                          className="rounded-md object-cover aspect-square"
-                          data-ai-hint="product item"
+                          size="md"
+                          showBorder={true}
+                          rounded={true}
                         />
-                      ) : (
-                        <div className="w-[50px] h-[50px] bg-muted rounded-md flex items-center justify-center">
-                            <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                      </TableCell>
+                      <TableCell className="font-medium">{product.name}</TableCell>
+                      <TableCell>
+                        <CategoryBadge 
+                          category={product.category || ""} 
+                          size="sm" 
+                          showIcon={true}
+                        />
+                      </TableCell>
+                      <TableCell className="text-right">{formatCurrency(product.costOfGoodsSold)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(product.price)}</TableCell>
+                      <TableCell className="text-left">
+                        <CompactStockIndicator
+                          stockLevel={stockLevel}
+                          lowStockThreshold={10}
+                          outOfStockThreshold={0}
+                        />
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex justify-center items-center space-x-2">
+                          <Button variant="outline" size="icon" onClick={() => handleEditProduct(product)} disabled={productMutation.isPending || deleteProductMutation.isPending}>
+                            <Edit className="h-4 w-4" />
+                            <span className="sr-only">Edit</span>
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="destructive" size="icon" disabled={productMutation.isPending || deleteProductMutation.isPending}>
+                                <Trash2 className="h-4 w-4" />
+                                <span className="sr-only">Delete</span>
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This action cannot be undone. This will permanently delete the product "{product.name}".
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteProduct(product.id)}>
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="font-medium">{product.name}</TableCell>
-                    <TableCell>{product.category || 'N/A'}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(product.costOfGoodsSold)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(product.price)}</TableCell>
-                    <TableCell className="text-right">{getStockForDisplay(product)}</TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex justify-center items-center space-x-2">
-                        <Button variant="outline" size="icon" onClick={() => handleEditProduct(product)} disabled={productMutation.isPending || deleteProductMutation.isPending}>
-                          <Edit className="h-4 w-4" />
-                          <span className="sr-only">Edit</span>
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="destructive" size="icon" disabled={productMutation.isPending || deleteProductMutation.isPending}>
-                              <Trash2 className="h-4 w-4" />
-                              <span className="sr-only">Delete</span>
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This action cannot be undone. This will permanently delete the product "{product.name}".
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDeleteProduct(product.id)}>
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </ScrollArea>

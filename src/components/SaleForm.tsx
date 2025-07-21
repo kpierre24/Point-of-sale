@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { SoldProduct, Product, PaymentMethod, TopUpCard, AppSettings, DiscountType } from "@/types";
+import type { Sale, Product, PaymentMethod, TopUpCard, AppSettings, DiscountType } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,12 @@ import { TAX_RATE as DEFAULT_TAX_RATE, PAYMENT_METHODS } from "@/config/constant
 import { suggestProductDetails, type SuggestProductDetailsInput } from '@/ai/flows/suggest-product-details';
 import { Lightbulb, PlusSquare, Loader2, PackageSearch, ScanLine, CreditCard, CheckCircle, XCircle, Percent, MinusCircle, Tag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useErrorHandler } from "@/hooks/use-error-handler";
+import { ErrorDisplay } from "@/components/ui/error-display";
+import { FormFieldWrapper } from "@/components/ui/form-field";
+import { CompactStockIndicator } from "@/components/ui/stock-indicator";
+import { CategoryBadge } from "@/components/ui/category-badge";
+import { ProductImage } from "@/components/ui/product-image";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Select,
@@ -24,10 +30,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 interface SaleFormProps {
   onRecordSale: (
-    saleData: Omit<SoldProduct, "id" | "timestamp" | "staffId" | "staffName">,
+    saleData: Omit<Sale, "id" | "timestamp" | "staffId" | "staffName">,
     paymentCardDetails?: { card: TopUpCard; saleTotal: number }
   ) => void;
-  soldItemsForAISuggestion: Pick<SoldProduct, 'name' | 'price'>[];
+  soldItemsForAISuggestion: Pick<Sale, 'name' | 'price'>[];
   availableProducts: Product[];
   findCardByCardId: (cardId: string) => TopUpCard | undefined;
   appSettings: Partial<AppSettings>;
@@ -61,6 +67,14 @@ export function SaleForm({
 
   const [isSuggesting, setIsSuggesting] = useState(false);
   const { toast } = useToast();
+  const { 
+    handleValidationError, 
+    handleStockError, 
+    handleCardError, 
+    handleInsufficientBalanceError,
+    handleNetworkError,
+    handleSuccess 
+  } = useErrorHandler();
 
   const [paymentCardIdInput, setPaymentCardIdInput] = useState('');
   const [verifiedPaymentCard, setVerifiedPaymentCard] = useState<TopUpCard | null>(null);
@@ -133,7 +147,7 @@ export function SaleForm({
 
   const handleGetSuggestion = async () => {
     if (!productName.trim() && !selectedProductId) { 
-      toast({ title: "Enter Product Name or Select Product", description: "Please enter a product name or select one to get suggestions.", variant: "destructive" });
+      handleValidationError("Please enter a product name or select one to get suggestions.", "Product Name");
       return;
     }
     setIsSuggesting(true);
@@ -156,10 +170,9 @@ export function SaleForm({
          setProductName(suggestion.productName);
       }
       setPrice(suggestion.productPrice);
-      toast({ title: "AI Suggestion Applied", description: `Product: ${suggestion.productName}, Price: ${formatCurrency(suggestion.productPrice)}` });
+      handleSuccess("AI Suggestion Applied", `Product: ${suggestion.productName}, Price: ${formatCurrency(suggestion.productPrice)}`);
     } catch (error) {
-      console.error("Error fetching AI suggestion:", error);
-      toast({ title: "Suggestion Error", description: "Could not fetch AI suggestion.", variant: "destructive" });
+      handleNetworkError(error, "get AI suggestion");
     } finally {
       setIsSuggesting(false);
     }
@@ -186,10 +199,10 @@ export function SaleForm({
     if (card) {
       setVerifiedPaymentCard(card);
       setPaymentCardIdInput(card.cardId);
-      toast({ title: "Card Verified", description: `Card ${card.cardId} balance: ${formatCurrency(card.currentBalance)}`});
+      handleSuccess("Card Verified", `Card ${card.cardId} balance: ${formatCurrency(card.currentBalance)}`);
     } else {
       setVerifiedPaymentCard(null);
-      toast({ title: "Card Not Found", description: `No card found with ID ${idToVerify}.`, variant: "destructive"});
+      handleCardError(idToVerify);
     }
     setIsScanningPaymentCard(false);
   };
@@ -202,15 +215,25 @@ export function SaleForm({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedLocationId) {
-        toast({ title: "Location Not Selected", description: "Please select a location before recording a sale.", variant: "destructive" });
+        handleValidationError("Please select a location before recording a sale.", "Location");
         return;
     }
 
     const numQuantity = Number(quantity);
     const numPrice = Number(price);
 
-    if (!productName.trim() || numQuantity <= 0 || numPrice <= 0) {
-      toast({ title: "Invalid Input", description: "Please fill all fields with valid values.", variant: "destructive" });
+    if (!productName.trim()) {
+      handleValidationError("Product name is required.", "Product Name");
+      return;
+    }
+    
+    if (numQuantity <= 0) {
+      handleValidationError("Quantity must be greater than 0.", "Quantity");
+      return;
+    }
+    
+    if (numPrice <= 0) {
+      handleValidationError("Price must be greater than 0.", "Price");
       return;
     }
 
@@ -220,7 +243,7 @@ export function SaleForm({
     if (selectedProductId) {
       const stockInLocation = productInStock?.stockByLocation?.[selectedLocationId] || 0;
       if (stockInLocation < numQuantity) {
-        toast({ title: "Insufficient Stock", description: `Only ${stockInLocation} of ${productName} available at this location.`, variant: "destructive" });
+        handleStockError(stockInLocation, numQuantity, productName);
         return;
       }
     }
@@ -229,15 +252,11 @@ export function SaleForm({
 
     if (paymentMethod === "Top-Up Card") {
       if (!verifiedPaymentCard) {
-        toast({ title: "Payment Card Not Verified", description: "Please verify a top-up card for payment.", variant: "destructive" });
+        handleValidationError("Please verify a top-up card for payment.", "Payment Card");
         return;
       }
       if (total > verifiedPaymentCard.currentBalance) {
-        toast({ 
-          title: "Insufficient Card Balance", 
-          description: `Sale total ${formatCurrency(total)} exceeds card balance ${formatCurrency(verifiedPaymentCard.currentBalance)}.`,
-          variant: "destructive" 
-        });
+        handleInsufficientBalanceError(verifiedPaymentCard.currentBalance, total);
         return;
       }
       paymentCardDetails = { card: verifiedPaymentCard, saleTotal: total };
@@ -282,73 +301,154 @@ export function SaleForm({
   }));
 
   return (
-    <Card className="shadow-lg">
-      <CardHeader>
-        <CardTitle className="flex items-center">
-          <PlusSquare className="mr-2 h-6 w-6 text-primary" />
-          Add New Sale
+    <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-slate-50">
+      <CardHeader className="pb-4">
+        <CardTitle className="flex items-center text-xl font-bold text-slate-800">
+          <PlusSquare className="mr-3 h-7 w-7 text-blue-600" />
+          New Sale
         </CardTitle>
-        <CardDescription>Enter product details or select an existing product to record a sale. Apply discounts if applicable.</CardDescription>
+        <CardDescription className="text-slate-600">
+          Select products and process payment with our streamlined interface
+        </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-6">
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="productSelection">Select Product (Optional)</Label>
+          {/* Enhanced Product Selection Section */}
+          <div className="space-y-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <Label htmlFor="productSelection" className="text-base font-semibold text-blue-900 flex items-center">
+              <PackageSearch className="mr-2 h-5 w-5 text-blue-600" />
+              Product Selection
+            </Label>
             <Select onValueChange={handleProductSelectionChange} value={selectedProductId || "custom"}>
-              <SelectTrigger id="productSelection">
-                <SelectValue placeholder="Select product or enter custom" />
+              <SelectTrigger id="productSelection" className="h-12 text-base border-blue-300 focus:border-blue-500 focus:ring-blue-500">
+                <SelectValue placeholder="Choose from inventory or enter custom item" />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="custom">
+              <SelectContent className="max-h-64">
+                <SelectItem value="custom" className="py-3">
                   <span className="flex items-center">
-                    <PackageSearch className="mr-2 h-4 w-4 text-muted-foreground" />
-                    Enter Custom Item
+                    <PackageSearch className="mr-3 h-4 w-4 text-slate-500" />
+                    <div>
+                      <div className="font-medium">Custom Item</div>
+                      <div className="text-xs text-slate-500">Enter product details manually</div>
+                    </div>
                   </span>
                 </SelectItem>
-                {productsForLocation.filter(p => p.stockForDisplay > 0).map(product => (
-                  <SelectItem key={product.id} value={product.id}>
-                    {product.name} (Stock: {product.stockForDisplay}) - {formatCurrency(product.price)}
-                  </SelectItem>
-                ))}
-                 {productsForLocation.filter(p => p.stockForDisplay <= 0).map(product => (
-                  <SelectItem key={product.id} value={product.id} disabled>
-                    {product.name} (Out of Stock) - {formatCurrency(product.price)}
-                  </SelectItem>
-                ))}
+                {productsForLocation.filter(p => p.stockForDisplay > 0).length > 0 && (
+                  <>
+                    <div className="px-2 py-1 text-xs font-semibold text-slate-500 bg-slate-100">IN STOCK</div>
+                    {productsForLocation.filter(p => p.stockForDisplay > 0).map(product => (
+                      <SelectItem key={product.id} value={product.id} className="py-4">
+                        <div className="flex items-center gap-3 w-full">
+                          <ProductImage
+                            src={product.imageUrl}
+                            alt={product.name}
+                            size="sm"
+                            showBorder={false}
+                            rounded={true}
+                          />
+                          <div className="flex-1">
+                            <div className="font-medium">{product.name}</div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <CategoryBadge 
+                                category={product.category || ""} 
+                                size="sm" 
+                                showIcon={false}
+                              />
+                              <CompactStockIndicator
+                                stockLevel={product.stockForDisplay}
+                                lowStockThreshold={10}
+                                outOfStockThreshold={0}
+                              />
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-semibold text-green-600">{formatCurrency(product.price)}</div>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
+                {productsForLocation.filter(p => p.stockForDisplay <= 0).length > 0 && (
+                  <>
+                    <div className="px-2 py-1 text-xs font-semibold text-slate-500 bg-slate-100">OUT OF STOCK</div>
+                    {productsForLocation.filter(p => p.stockForDisplay <= 0).map(product => (
+                      <SelectItem key={product.id} value={product.id} disabled className="py-4 opacity-50">
+                        <div className="flex items-center gap-3 w-full">
+                          <ProductImage
+                            src={product.imageUrl}
+                            alt={product.name}
+                            size="sm"
+                            showBorder={false}
+                            rounded={true}
+                          />
+                          <div className="flex-1">
+                            <div className="font-medium">{product.name}</div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <CategoryBadge 
+                                category={product.category || ""} 
+                                size="sm" 
+                                showIcon={false}
+                              />
+                              <CompactStockIndicator
+                                stockLevel={product.stockForDisplay}
+                                lowStockThreshold={10}
+                                outOfStockThreshold={0}
+                              />
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-semibold text-slate-400">{formatCurrency(product.price)}</div>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
               </SelectContent>
             </Select>
           </div>
         
-          <div className="space-y-2">
-            <Label htmlFor="productName">Product Name</Label>
-            <div className="flex items-center gap-2">
+          {/* Enhanced Product Details Section */}
+          <div className="space-y-3 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+            <Label htmlFor="productName" className="text-base font-semibold text-slate-800">Product Details</Label>
+            <div className="flex items-center gap-3">
               <Input
                 id="productName"
                 value={productName}
                 onChange={(e) => setProductName(e.target.value)}
-                placeholder="e.g., Organic Apples or AI Suggested"
+                placeholder="Enter product name or use AI suggestion"
                 required
                 disabled={!!selectedProductId}
+                className="h-11 text-base border-slate-300 focus:border-blue-500 focus:ring-blue-500"
               />
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button type="button" variant="outline" size="icon" onClick={handleGetSuggestion} disabled={isSuggesting || (!productName.trim() && !selectedProductId)}>
-                      {isSuggesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4" />}
-                      <span className="sr-only">Get AI Suggestion for Name & Price</span>
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="lg"
+                      onClick={handleGetSuggestion} 
+                      disabled={isSuggesting || (!productName.trim() && !selectedProductId)}
+                      className="h-11 px-4 border-amber-300 hover:bg-amber-50 hover:border-amber-400"
+                    >
+                      {isSuggesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lightbulb className="h-4 w-4 text-amber-600" />}
+                      <span className="sr-only">Get AI Suggestion</span>
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Get AI Suggestion for Name & Price</p>
+                    <p>Get AI suggestion for name & price</p>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="quantity">Quantity</Label>
+          {/* Enhanced Quantity and Price Section - Responsive */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+            <div className="space-y-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <Label htmlFor="quantity" className="text-base font-semibold text-green-900">Quantity</Label>
               <Input
                 id="quantity"
                 type="number"
@@ -357,33 +457,39 @@ export function SaleForm({
                 placeholder="1"
                 min="1"
                 required
+                className="h-12 text-lg font-semibold text-center border-green-300 focus:border-green-500 focus:ring-green-500"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="price">Unit Price ($)</Label>
-              <Input
-                id="price"
-                type="number"
-                value={price}
-                onChange={(e) => setPrice(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
-                placeholder="0.00"
-                min="0.01"
-                step="0.01"
-                required
-                disabled={!!selectedProductId}
-              />
+            <div className="space-y-3 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <Label htmlFor="price" className="text-base font-semibold text-emerald-900">Unit Price</Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-lg font-semibold text-emerald-700">$</span>
+                <Input
+                  id="price"
+                  type="number"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value === '' ? '' : Math.max(0, Number(e.target.value)))}
+                  placeholder="0.00"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  disabled={!!selectedProductId}
+                  className="h-12 text-lg font-semibold pl-8 border-emerald-300 focus:border-emerald-500 focus:ring-emerald-500"
+                />
+              </div>
             </div>
           </div>
 
+          {/* Responsive Discount Section */}
           <Card className="p-4 space-y-3 bg-muted/20 border-dashed">
             <div className="flex justify-between items-center">
               <Label className="text-md font-medium flex items-center"><Tag className="mr-2 h-5 w-5 text-primary"/>Discount</Label>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div className="space-y-2">
                 <Label htmlFor="discountType">Discount Type</Label>
                 <Select value={discountType} onValueChange={(value: DiscountType) => {setDiscountType(value); setDiscountValue(0);}}>
-                  <SelectTrigger id="discountType">
+                  <SelectTrigger id="discountType" className="h-11">
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent>
@@ -404,6 +510,7 @@ export function SaleForm({
                   step={discountType === 'percentage' ? "0.1" : "0.01"}
                   disabled={discountType === 'none'}
                   placeholder="0"
+                  className="h-11"
                 />
               </div>
             </div>
@@ -470,36 +577,71 @@ export function SaleForm({
             </Card>
           )}
 
-          <div className="space-y-3 rounded-md bg-muted/50 p-4 border">
-            <h3 className="text-sm font-medium text-muted-foreground">Sale Summary</h3>
-            <div className="flex justify-between text-sm">
-              <span>Subtotal (Before Discount):</span>
-              <span className="font-medium">{formatCurrency(subtotalBeforeDiscount)}</span>
-            </div>
-             {calculatedDiscountAmount > 0 && (
-              <div className="flex justify-between text-sm text-red-600">
-                <span>Discount Applied:</span>
-                <span className="font-medium">- {formatCurrency(calculatedDiscountAmount)}</span>
+          {/* Enhanced Sale Summary with Prominent Total */}
+          <Card className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 shadow-md">
+            <div className="space-y-4">
+              <h3 className="text-lg font-bold text-blue-900 flex items-center">
+                <CreditCard className="mr-2 h-5 w-5" />
+                Sale Summary
+              </h3>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm text-slate-600">
+                  <span>Subtotal (Before Discount):</span>
+                  <span className="font-semibold">{formatCurrency(subtotalBeforeDiscount)}</span>
+                </div>
+                
+                {calculatedDiscountAmount > 0 && (
+                  <div className="flex justify-between text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">
+                    <span className="flex items-center">
+                      <Tag className="mr-1 h-3 w-3" />
+                      Discount Applied:
+                    </span>
+                    <span className="font-semibold">- {formatCurrency(calculatedDiscountAmount)}</span>
+                  </div>
+                )}
+                
+                <div className="flex justify-between text-sm text-slate-600">
+                  <span>Subtotal (After Discount):</span>
+                  <span className="font-semibold">{formatCurrency(subtotalAfterDiscount)}</span>
+                </div>
+                
+                <div className="flex justify-between text-sm text-slate-600">
+                  <span>Tax ({(currentTaxRate * 100).toFixed(2)}%):</span>
+                  <span className="font-semibold">{formatCurrency(taxAmount)}</span>
+                </div>
+                
+                <div className="border-t-2 border-blue-300 pt-3 mt-4">
+                  <div className="flex justify-between items-center bg-blue-600 text-white px-4 py-3 rounded-lg">
+                    <span className="text-lg font-bold">TOTAL:</span>
+                    <span className="text-2xl font-bold">{formatCurrency(total)}</span>
+                  </div>
+                </div>
               </div>
-            )}
-            <div className="flex justify-between text-sm">
-              <span>Subtotal (After Discount):</span>
-              <span className="font-medium">{formatCurrency(subtotalAfterDiscount)}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span>Tax ({ (currentTaxRate * 100).toFixed(2) }%):</span>
-              <span className="font-medium">{formatCurrency(taxAmount)}</span>
-            </div>
-            <div className="flex justify-between text-lg font-semibold">
-              <span>Total:</span>
-              <span>{formatCurrency(total)}</span>
-            </div>
-          </div>
+          </Card>
           
-          <Button type="submit" className="w-full" disabled={!canSubmit || isSubmittingSale}>
-            {isSubmittingSale ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <PlusSquare className="mr-2 h-5 w-5" />}
-            Record Sale
-          </Button>
+          {/* Prominent Primary Action Button */}
+          <div className="pt-4 border-t-2 border-slate-200">
+            <Button 
+              type="submit" 
+              size="lg"
+              className="w-full h-14 text-lg font-bold bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-[1.02]" 
+              disabled={!canSubmit || isSubmittingSale}
+            >
+              {isSubmittingSale ? (
+                <>
+                  <Loader2 className="mr-3 h-6 w-6 animate-spin" />
+                  Processing Sale...
+                </>
+              ) : (
+                <>
+                  <CreditCard className="mr-3 h-6 w-6" />
+                  Process Payment • {formatCurrency(total)}
+                </>
+              )}
+            </Button>
+          </div>
         </form>
       </CardContent>
     </Card>

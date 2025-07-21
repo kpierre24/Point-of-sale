@@ -26,6 +26,7 @@ import { collection, getDocs, doc, setDoc, addDoc, writeBatch, query as firestor
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useLocation } from "@/context/LocationContext";
+import { ProtectedComponent, PERMISSIONS } from '@/hooks/use-permissions';
 
 const SALES_COLLECTION = 'sales';
 const PRODUCTS_COLLECTION = 'products';
@@ -272,10 +273,12 @@ export default function SalesPage() {
               Record new sales and view sales history. Data stored in Firestore.
             </CardDescription>
           </div>
-          <Button onClick={handleExportSales} variant="outline" disabled={soldItems.length === 0}>
-            <Download className="mr-2 h-4 w-4" />
-            Export Sales
-          </Button>
+          <ProtectedComponent requiredPermissions={[PERMISSIONS.REPORTS_EXPORT]}>
+            <Button onClick={handleExportSales} variant="outline" disabled={soldItems.length === 0}>
+              <Download className="mr-2 h-4 w-4" />
+              Export Sales
+            </Button>
+          </ProtectedComponent>
         </header>
 
         <main>

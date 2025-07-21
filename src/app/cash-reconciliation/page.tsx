@@ -91,7 +91,11 @@ export default function CashReconciliationPage() {
         enabled: !!db,
     });
 
-    const { data: transactions, isLoading: isLoadingTransactions, refetch } = useQuery({
+    const { data: transactions, isLoading: isLoadingTransactions, refetch } = useQuery<{
+        cashSales: Sale[];
+        cashTopUps: CardTransaction[];
+        pettyCashTransactions: PettyCashTransaction[];
+    }, Error>({
         queryKey: ['cashTransactions', selectedLocationId, reconciliationDate],
         queryFn: () => fetchTransactionsForDate(selectedLocationId!, reconciliationDate!),
         enabled: !!selectedLocationId && !!reconciliationDate && !!db,
