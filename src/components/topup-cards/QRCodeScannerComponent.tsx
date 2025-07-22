@@ -2,7 +2,7 @@
 // src/components/topup-cards/QRCodeScannerComponent.tsx
 "use client";
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Html5Qrcode, Html5QrcodeScannerState } from 'html5-qrcode';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -22,14 +22,16 @@ const QRCodeScannerComponent = ({ onScanSuccess, onScanFailure, active, setActiv
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const { toast } = useToast();
 
+  // Use refs to hold stable references to the callbacks
+  const onScanSuccessRef = useRef(onScanSuccess);
+  const onScanFailureRef = useRef(onScanFailure);
   useEffect(() => {
-    if (!active || typeof window === 'undefined') {
-      // Ensure scanner is stopped if it was active
-      if (html5QrCodeRef.current && html5QrCodeRef.current.getState() === Html5QrcodeScannerState.SCANNING) {
-        html5QrCodeRef.current.stop().catch(err => console.error("Error stopping QR scanner on inactive.", err));
-      }
-      return;
-    }
+    onScanSuccessRef.current = onScanSuccess;
+    onScanFailureRef.current = onScanFailure;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
 
     if (!html5QrCodeRef.current) {
       html5QrCodeRef.current = new Html5Qrcode(scannerRegionId, { verbose: false });
@@ -37,7 +39,6 @@ const QRCodeScannerComponent = ({ onScanSuccess, onScanFailure, active, setActiv
     const qrCode = html5QrCodeRef.current;
 
     const startScanner = async () => {
-      // Prevent starting if already scanning
       if (qrCode.getState() === Html5QrcodeScannerState.SCANNING) return;
 
       try {
@@ -52,11 +53,11 @@ const QRCodeScannerComponent = ({ onScanSuccess, onScanFailure, active, setActiv
           { facingMode: "environment" },
           config,
           (decodedText, decodedResult) => {
-            onScanSuccess(decodedText, decodedResult);
+            onScanSuccessRef.current(decodedText, decodedResult);
             setActive(false);
           },
           (errorMessage) => {
-            if (onScanFailure) onScanFailure(errorMessage);
+            if (onScanFailureRef.current) onScanFailureRef.current(errorMessage);
           }
         );
         setHasCameraPermission(true);
@@ -73,15 +74,21 @@ const QRCodeScannerComponent = ({ onScanSuccess, onScanFailure, active, setActiv
         setActive(false);
       }
     };
-
-    startScanner();
+    
+    if (active) {
+      startScanner();
+    } else {
+       if (qrCode && qrCode.getState() === Html5QrcodeScannerState.SCANNING) {
+        qrCode.stop().catch(err => console.error("Error stopping QR scanner on inactive.", err));
+      }
+    }
 
     return () => {
       if (qrCode && qrCode.getState() === Html5QrcodeScannerState.SCANNING) {
         qrCode.stop().catch(err => console.error("Error stopping QR scanner on cleanup.", err));
       }
     };
-  }, [active, onScanFailure, onScanSuccess, setActive, toast]);
+  }, [active, setActive, toast]);
 
   const toggleScanner = () => {
     setActive(!active);
@@ -94,12 +101,10 @@ const QRCodeScannerComponent = ({ onScanSuccess, onScanFailure, active, setActiv
         {active ? 'Stop QR Scanner' : 'Scan Card QR Code'}
       </Button>
 
-      {/* The scanner div is always in the DOM but hidden, which is more stable for the library */}
       <div 
         id={scannerRegionId} 
         className={`w-full border-2 border-dashed border-primary rounded-md overflow-hidden aspect-square max-w-sm mx-auto bg-muted ${!active ? 'hidden' : ''}`}
       >
-        {/* The library will render the video stream here. */}
       </div>
       
       {active && hasCameraPermission === false && (
