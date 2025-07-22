@@ -18,6 +18,13 @@ interface KeyboardShortcutsHelpProps {
 }
 
 export function KeyboardShortcutsHelp({ isOpen, onClose, shortcuts }: KeyboardShortcutsHelpProps) {
+  const [isMac, setIsMac] = React.useState(false)
+
+  React.useEffect(() => {
+    // This check runs only on the client, avoiding SSR errors.
+    setIsMac(navigator.platform.toUpperCase().indexOf("MAC") >= 0)
+  }, [])
+
   // Group shortcuts by category
   const groupedShortcuts = React.useMemo(() => {
     const groups: Record<string, KeyboardShortcut[]> = {}
@@ -37,10 +44,10 @@ export function KeyboardShortcutsHelp({ isOpen, onClose, shortcuts }: KeyboardSh
     const keys = []
     
     if (shortcut.ctrlKey || shortcut.metaKey) {
-      keys.push(navigator.platform.includes("Mac") ? "⌘" : "Ctrl")
+      keys.push(isMac ? "⌘" : "Ctrl")
     }
     if (shortcut.altKey) {
-      keys.push(navigator.platform.includes("Mac") ? "⌥" : "Alt")
+      keys.push(isMac ? "⌥" : "Alt")
     }
     if (shortcut.shiftKey) {
       keys.push("⇧")
