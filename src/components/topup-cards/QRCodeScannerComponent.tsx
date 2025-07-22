@@ -3,16 +3,16 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Html5Qrcode, Html5QrcodeScannerState } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeScannerState, Html5QrcodeError, Html5QrcodeResult } from 'html5-qrcode';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Camera, CameraOff, ScanLine } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface QRCodeScannerComponentProps {
-  onScanSuccess: (decodedText: string, decodedResult: any) => void;
-  onScanFailure?: (error: any) => void;
-  active: boolean; // To control when the scanner is active
+  onScanSuccess: (decodedText: string, decodedResult: Html5QrcodeResult) => void;
+  onScanFailure?: (error: Html5QrcodeError) => void;
+  active: boolean;
   setActive: (active: boolean) => void;
 }
 
@@ -22,73 +22,82 @@ const QRCodeScannerComponent = ({ onScanSuccess, onScanFailure, active, setActiv
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const { toast } = useToast();
 
-  // Use refs to hold stable references to the callbacks
   const onScanSuccessRef = useRef(onScanSuccess);
   const onScanFailureRef = useRef(onScanFailure);
+
   useEffect(() => {
     onScanSuccessRef.current = onScanSuccess;
     onScanFailureRef.current = onScanFailure;
   });
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    if (!html5QrCodeRef.current) {
-      html5QrCodeRef.current = new Html5Qrcode(scannerRegionId, { verbose: false });
-    }
+  const startScanner = useCallback(async () => {
     const qrCode = html5QrCodeRef.current;
+    if (!qrCode || qrCode.getState() === Html5QrcodeScannerState.SCANNING) {
+      return;
+    }
 
-    const startScanner = async () => {
-      if (qrCode.getState() === Html5QrcodeScannerState.SCANNING) return;
-
-      try {
-        const cameras = await Html5Qrcode.getCameras();
-        if (!cameras || cameras.length === 0) {
-          throw new Error("No cameras found on this device.");
-        }
-        
-        const config = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
-        
-        await qrCode.start(
-          { facingMode: "environment" },
-          config,
-          (decodedText, decodedResult) => {
-            onScanSuccessRef.current(decodedText, decodedResult);
-            setActive(false);
-          },
-          (errorMessage) => {
-            if (onScanFailureRef.current) onScanFailureRef.current(errorMessage);
-          }
-        );
-        setHasCameraPermission(true);
-      } catch (err: any) {
-        console.error("QR Scanner Start Error:", err);
-        const errorMessage = typeof err === 'string' ? err : (err.message || 'An unknown error occurred.');
-
-        if (errorMessage.includes("NotAllowedError") || errorMessage.includes("PermissionDeniedError")) {
-          toast({ variant: "destructive", title: "Camera Access Denied", description: "Please enable camera permissions in your browser." });
-        } else {
-          toast({ variant: "destructive", title: "Scanner Error", description: `Could not start QR scanner: ${errorMessage}` });
-        }
-        setHasCameraPermission(false);
-        setActive(false);
+    try {
+      const cameras = await Html5Qrcode.getCameras();
+      if (!cameras || cameras.length === 0) {
+        throw new Error("No cameras found on this device.");
       }
-    };
-    
-    if (active) {
-      startScanner();
-    } else {
-       if (qrCode && qrCode.getState() === Html5QrcodeScannerState.SCANNING) {
-        qrCode.stop().catch(err => console.error("Error stopping QR scanner on inactive.", err));
+      
+      const config = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
+      
+      await qrCode.start(
+        { facingMode: "environment" },
+        config,
+        (decodedText, decodedResult) => {
+          onScanSuccessRef.current(decodedText, decodedResult);
+          setActive(false); // This will trigger the cleanup in the other effect
+        },
+        (errorMessage, error) => {
+          // This callback is for scan failures, not initialization errors
+          if (onScanFailureRef.current && error) onScanFailureRef.current(error as Html5QrcodeError);
+        }
+      );
+      setHasCameraPermission(true);
+    } catch (err: any) {
+      console.error("QR Scanner Start Error:", err);
+      const errorMessage = typeof err === 'string' ? err : (err.message || 'An unknown error occurred.');
+
+      if (errorMessage.includes("NotAllowedError") || errorMessage.includes("PermissionDeniedError")) {
+        toast({ variant: "destructive", title: "Camera Access Denied", description: "Please enable camera permissions in your browser." });
+      } else {
+        toast({ variant: "destructive", title: "Scanner Error", description: `Could not start QR scanner: ${errorMessage}` });
       }
+      setHasCameraPermission(false);
+      setActive(false);
+    }
+  }, [setActive, toast]);
+
+  const stopScanner = useCallback(() => {
+    const qrCode = html5QrCodeRef.current;
+    if (qrCode && qrCode.getState() === Html5QrcodeScannerState.SCANNING) {
+      return qrCode.stop();
+    }
+    return Promise.resolve();
+  }, []);
+
+  // Effect for initialization and cleanup
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !html5QrCodeRef.current) {
+        html5QrCodeRef.current = new Html5Qrcode(scannerRegionId, { verbose: false });
     }
 
     return () => {
-      if (qrCode && qrCode.getState() === Html5QrcodeScannerState.SCANNING) {
-        qrCode.stop().catch(err => console.error("Error stopping QR scanner on cleanup.", err));
-      }
+      stopScanner().catch(err => console.error("Error stopping scanner on unmount:", err));
     };
-  }, [active, setActive, toast]);
+  }, [scannerRegionId, stopScanner]);
+
+  // Effect to start/stop scanner based on 'active' prop
+  useEffect(() => {
+    if (active) {
+      startScanner();
+    } else {
+      stopScanner().catch(err => console.warn("Error stopping scanner on active state change:", err));
+    }
+  }, [active, startScanner, stopScanner]);
 
   const toggleScanner = () => {
     setActive(!active);
