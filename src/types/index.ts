@@ -174,6 +174,7 @@ export interface Reconciliation {
     totalCashTopUps: number;
     totalPettyCashIn: number;
     totalPettyCashOut: number;
+    totalWastageCost: number; // Added for wastage
     createdAt: string; // ISO timestamp
 }
 
@@ -185,4 +186,17 @@ export interface PettyCashTransaction {
     amount: number;
     reason: string;
     staffMember?: string; // Optional
+}
+
+export interface WastageEvent {
+    id: string;
+    locationId: string;
+    timestamp: string; // ISO timestamp
+    productId: string;
+    productName: string;
+    quantity: number;
+    costPerItem: number;
+    totalCost: number;
+    reason: string;
+    staffMember?: string;
 }
