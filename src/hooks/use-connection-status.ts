@@ -22,7 +22,7 @@ const DEFAULT_OPTIONS: Required<ConnectionOptions> = {
   checkInterval: 30000, // 30 seconds
   maxRetries: 3,
   retryDelay: 5000, // 5 seconds
-  endpoints: ['/api/health', '/api/status'],
+  endpoints: ['/api/health'],
   showToasts: true,
 }
 
