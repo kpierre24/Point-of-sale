@@ -33,10 +33,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { BarcodeScanner } from "@/components/inventory/barcode-scanner"
-import { SupplierManagement } from "@/components/inventory/supplier-management"
-import { BatchTrackingSystem } from "@/components/inventory/batch-tracking-system"
-import { AutoReorderSystem } from "@/components/inventory/auto-reorder-system"
-import { InventoryAuditTrail } from "@/components/inventory/inventory-audit-trail"
 import { useNotifications } from "@/hooks/use-notifications"
 import { ProtectedComponent, PERMISSIONS } from "@/hooks/use-permissions"
 import { format, subDays } from "date-fns"
@@ -96,37 +92,6 @@ const mockInventoryItems = [
     location: "B1-A1",
     status: "Low Stock",
     barcode: "3456789012345"
-  }
-]
-
-const mockSuppliers = [
-  {
-    id: "1",
-    name: "TechCorp",
-    contact: "John Smith",
-    email: "orders@techcorp.com",
-    phone: "+1 (555) 123-4567",
-    address: "123 Tech Street, Silicon Valley, CA",
-    paymentTerms: "Net 30",
-    leadTime: 7,
-    rating: 4.8,
-    totalOrders: 45,
-    activeProducts: 12,
-    lastOrder: subDays(new Date(), 3)
-  },
-  {
-    id: "2",
-    name: "ComfortCo",
-    contact: "Sarah Johnson",
-    email: "supply@comfortco.com", 
-    phone: "+1 (555) 987-6543",
-    address: "456 Comfort Ave, Furniture City, TX",
-    paymentTerms: "Net 15",
-    leadTime: 14,
-    rating: 4.5,
-    totalOrders: 23,
-    activeProducts: 8,
-    lastOrder: subDays(new Date(), 10)
   }
 ]
 
@@ -275,26 +240,10 @@ export default function InventoryPage() {
 
       {/* Inventory Tabs */}
       <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList>
           <TabsTrigger value="overview" className="flex items-center gap-2">
             <Package className="h-4 w-4" />
             Overview
-          </TabsTrigger>
-          <TabsTrigger value="suppliers" className="flex items-center gap-2">
-            <Truck className="h-4 w-4" />
-            Suppliers
-          </TabsTrigger>
-          <TabsTrigger value="batches" className="flex items-center gap-2">
-            <QrCode className="h-4 w-4" />
-            Batch Tracking
-          </TabsTrigger>
-          <TabsTrigger value="reorder" className="flex items-center gap-2">
-            <RefreshCw className="h-4 w-4" />
-            Auto Reorder
-          </TabsTrigger>
-          <TabsTrigger value="audit" className="flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            Audit Trail
           </TabsTrigger>
         </TabsList>
 
@@ -419,22 +368,6 @@ export default function InventoryPage() {
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="suppliers" className="space-y-4">
-          <SupplierManagement suppliers={mockSuppliers} />
-        </TabsContent>
-
-        <TabsContent value="batches" className="space-y-4">
-          <BatchTrackingSystem items={mockInventoryItems} />
-        </TabsContent>
-
-        <TabsContent value="reorder" className="space-y-4">
-          <AutoReorderSystem items={mockInventoryItems} />
-        </TabsContent>
-
-        <TabsContent value="audit" className="space-y-4">
-          <InventoryAuditTrail />
         </TabsContent>
       </Tabs>
 
