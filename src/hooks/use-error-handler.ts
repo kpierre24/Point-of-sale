@@ -181,7 +181,7 @@ export function useErrorHandler() {
         if (options?.loadingMessage) {
           toast({
             title: options.loadingMessage,
-            description: "Please wait...",
+            description: "Please wait while we process your request.",
             variant: "default",
           })
         }

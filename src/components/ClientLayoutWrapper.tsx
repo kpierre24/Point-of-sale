@@ -62,6 +62,7 @@ import { useKeyboardShortcuts, useKeyboardShortcutsHelp, commonShortcuts } from 
 import { useNotifications } from '@/hooks/use-notifications';
 import { Button } from '@/components/ui/button';
 import { PermissionProvider } from '@/hooks/use-permissions';
+import { HeaderConnectionStatus, OfflineBanner } from '@/components/ui/connection-status';
 
 interface NavItem {
   href: string;
@@ -584,6 +585,7 @@ function LocationAwareLayout({ children }: { children: React.ReactNode }) {
             </div>
             
             <div className="flex items-center gap-2">
+              <HeaderConnectionStatus />
               <Button variant="ghost" size="sm" onClick={toggleHelp}>
                 <Keyboard className="h-4 w-4 mr-2" />
                 Shortcuts
@@ -607,18 +609,13 @@ function LocationAwareLayout({ children }: { children: React.ReactNode }) {
               
               {/* Mobile Controls */}
               <div className="ml-auto flex items-center gap-2">
+                <HeaderConnectionStatus />
                 <ThemeToggle />
                 <NotificationCenter />
-                {selectedLocationId && locations.length > 0 && (
-                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                    <MapPin className="h-4 w-4" />
-                    <span className="hidden sm:inline truncate max-w-24">
-                      {locations.find(loc => loc.id === selectedLocationId)?.name || 'Unknown'}
-                    </span>
-                  </div>
-                )}
               </div>
           </header>
+
+          <OfflineBanner />
           
           {/* Mobile Bottom Navigation - Only visible on small screens */}
           <nav className="fixed bottom-0 left-0 right-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-t md:hidden">
