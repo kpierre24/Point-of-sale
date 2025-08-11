@@ -55,15 +55,10 @@ const askAssistantFlow = ai.defineFlow(
     outputSchema: AskAssistantOutputSchema,
   },
   async (input) => {
-    const llmResponse = await assistantPrompt.generate({
-      input: { query: input.query },
-    });
-    
-    const output = llmResponse.output();
+    const { output } = await assistantPrompt(input);
     if (!output) {
       throw new Error("The AI model did not return a structured output.");
     }
-    
     return { answer: output.answer };
   }
 );
