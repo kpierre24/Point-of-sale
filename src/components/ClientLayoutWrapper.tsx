@@ -51,6 +51,7 @@ import {
   Keyboard,
   Zap,
   BarChart3,
+  HardDriveDownload,
 } from 'lucide-react';
 import { LocationProvider, useLocation } from '@/context/LocationContext';
 import { cn } from '@/lib/utils';
@@ -94,6 +95,7 @@ const settingsNavItems: NavItem[] = [
  { href: '/locations', icon: MapPin, label: 'Locations', tooltip: 'Manage Store Locations' },
  { href: '/team', icon: UserCog, label: 'Team', tooltip: 'Team Time Tracking & Management' },
  { href: '/settings', icon: SettingsIcon, label: 'Settings', tooltip: 'Application Settings' },
+ { href: '/export', icon: HardDriveDownload, label: 'Export Data', tooltip: 'Download your data' },
  { href: '/migrate-data', icon: Database, label: 'Migrate Data (Dev)', tooltip: 'Migrate Local Storage to Firestore', devOnly: true },
 ];
 
