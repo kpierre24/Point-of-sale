@@ -34,7 +34,7 @@ const formatCurrency = (amount: number) => {
 };
 
 // Fetcher functions
-const fetchAllSalesForReport = async (startDate?: Date, endDate?: Date, sessionId?: string | null): Promise<SoldProduct[]> => {
+const fetchAllSalesForReport = async (startDate?: Date, endDate?: Date): Promise<SoldProduct[]> => {
   if (!db) throw new Error("Firestore not available");
   const salesCol = collection(db, SALES_COLLECTION);
   let q = firestoreQuery(salesCol, orderBy("timestamp", "desc"));
@@ -46,11 +46,6 @@ const fetchAllSalesForReport = async (startDate?: Date, endDate?: Date, sessionI
      const endOfDayEndDate = new Date(endDate);
      endOfDayEndDate.setHours(23,59,59,999);
     q = firestoreQuery(q, where("timestamp", "<=", endOfDayEndDate.toISOString()));
-  }
-
-  // Filter by session if one is active/provided
-  if (sessionId) {
-    q = firestoreQuery(q, where("sessionId", "==", sessionId));
   }
 
   const snapshot = await getDocs(q);
@@ -80,7 +75,6 @@ const fetchProducts = async (): Promise<Product[]> => {
 
 export default function ReportsPage() {
   const { toast } = useToast();
-  const { activeSessionId } = useLocation();
   const [reportType, setReportType] = useState<ReportType>('');
   const [selectedStaffId, setSelectedStaffId] = useState<string>('all');
   const [selectedLocationId, setSelectedLocationId] = useState<string>('all');
@@ -137,7 +131,7 @@ export default function ReportsPage() {
     setReportTitle('Generating report...');
 
     try {
-        const fetchedSales = await fetchAllSalesForReport(startDate, endDate, activeSessionId);
+        const fetchedSales = await fetchAllSalesForReport(startDate, endDate);
         let data: ReportDataItem[] = [];
         let title = '';
 

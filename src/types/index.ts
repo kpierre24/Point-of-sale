@@ -7,17 +7,6 @@ export interface Location {
   id: string;
   name: string;
   address?: string;
-  activeSessionId?: string; // ID of the currently active session
-}
-
-export interface Session {
-  id: string;
-  locationId: string;
-  startDate: string; // ISO Date string
-  endDate?: string; // ISO Date string, set when session is closed
-  name: string; // e.g., "January 2025"
-  status: 'active' | 'archived';
-  startedBy: string; // User ID
 }
 
 export interface Product {
@@ -65,7 +54,6 @@ export interface PurchaseOrder {
   grandTotal: number; 
   notes?: string;
   locationId: string; 
-  sessionId?: string; // Added for session tracking
 }
 
 export const USER_ROLES = ["Front Staff", "Manager", "Owner", "Administrator", "Catering"] as const;
@@ -99,7 +87,6 @@ export interface Sale {
   timestamp: string; 
   productId?: string; 
   locationId: string; 
-  sessionId?: string; // Added for session tracking
   costOfGoodsSoldAtTimeOfSale?: number; // Added for P&L
   customerId?: string; 
   paymentMethod: PaymentMethod;
@@ -159,7 +146,6 @@ export interface CardTransaction {
   notes?: string;
   paymentMethod?: PaymentMethod;
   locationId?: string;
-  sessionId?: string; // Added for session tracking
 }
 
 // App Settings
@@ -188,7 +174,6 @@ export interface Reconciliation {
     id: string; // e.g., 'locationId-YYYY-MM-DD'
     date: string; // YYYY-MM-DD
     locationId: string;
-    sessionId?: string; // Added for session tracking
     expectedCash: number;
     countedCash: number;
     variance: number;
@@ -203,7 +188,6 @@ export interface Reconciliation {
 export interface PettyCashTransaction {
     id: string;
     locationId: string;
-    sessionId?: string; // Added for session tracking
     timestamp: string; // ISO timestamp
     type: 'in' | 'out';
     amount: number;
@@ -214,7 +198,6 @@ export interface PettyCashTransaction {
 export interface WastageEvent {
     id: string;
     locationId: string;
-    sessionId?: string; // Added for session tracking
     timestamp: string; // ISO timestamp
     productId: string;
     productName: string;

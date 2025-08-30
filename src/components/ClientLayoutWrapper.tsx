@@ -94,7 +94,6 @@ const navItems: NavItem[] = [
 
 const settingsNavItems: NavItem[] = [
  { href: '/locations', icon: MapPin, label: 'Locations', tooltip: 'Manage Store Locations' },
- { href: '/sessions', icon: Archive, label: 'Sessions', tooltip: 'Manage Monthly Sessions' },
  { href: '/team', icon: UserCog, label: 'Team', tooltip: 'Team Time Tracking & Management' },
  { href: '/settings', icon: SettingsIcon, label: 'Settings', tooltip: 'Application Settings' },
  { href: '/export', icon: HardDriveDownload, label: 'Export Data', tooltip: 'Download your data' },
@@ -729,4 +728,3 @@ export function ClientLayoutWrapper({ children }: { children: React.ReactNode })
         </QueryClientProvider>
     );
 }
-

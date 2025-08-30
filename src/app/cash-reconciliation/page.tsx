@@ -47,9 +47,8 @@ const fetchProducts = async (): Promise<Product[]> => {
 };
 
 
-const fetchTransactionsForDate = async (locationId: string, date: Date, sessionId: string | null) => {
+const fetchTransactionsForDate = async (locationId: string, date: Date) => {
     if (!db) throw new Error("Firestore not available");
-    if (!sessionId) return { cashSales: [], cashTopUps: [], pettyCashTransactions: [], wastageEvents: [] };
 
     const start = startOfDay(date);
     const end = endOfDay(date);
@@ -57,7 +56,6 @@ const fetchTransactionsForDate = async (locationId: string, date: Date, sessionI
     const baseQuery = (collectionName: string) => firestoreQuery(
         collection(db, collectionName),
         where("locationId", "==", locationId),
-        where("sessionId", "==", sessionId),
         where("timestamp", ">=", start.toISOString()),
         where("timestamp", "<=", end.toISOString())
     );
@@ -86,7 +84,7 @@ const fetchTransactionsForDate = async (locationId: string, date: Date, sessionI
 export default function CashReconciliationPage() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
-    const { selectedLocationId, activeSessionId } = useLocation();
+    const { selectedLocationId } = useLocation();
     
     const [reconciliationDate, setReconciliationDate] = useState<Date | undefined>(new Date());
     const [countedCash, setCountedCash] = useState<string>('');
@@ -105,16 +103,16 @@ export default function CashReconciliationPage() {
     });
 
     const { data: transactions, isLoading: isLoadingTransactions, refetch } = useQuery({
-        queryKey: ['transactionsForDate', selectedLocationId, reconciliationDate, activeSessionId],
-        queryFn: () => fetchTransactionsForDate(selectedLocationId!, reconciliationDate!, activeSessionId),
-        enabled: !!selectedLocationId && !!reconciliationDate && !!db && !!activeSessionId,
+        queryKey: ['transactionsForDate', selectedLocationId, reconciliationDate],
+        queryFn: () => fetchTransactionsForDate(selectedLocationId!, reconciliationDate!),
+        enabled: !!selectedLocationId && !!reconciliationDate && !!db,
     });
     
     useEffect(() => {
-        if(selectedLocationId && reconciliationDate && activeSessionId) {
+        if(selectedLocationId && reconciliationDate) {
             refetch();
         }
-    }, [selectedLocationId, reconciliationDate, activeSessionId, refetch]);
+    }, [selectedLocationId, reconciliationDate, refetch]);
     
     const totalCashSales = useMemo(() => transactions?.cashSales.reduce((sum, sale) => sum + sale.total, 0) || 0, [transactions]);
     const totalCashTopUps = useMemo(() => transactions?.cashTopUps.reduce((sum, topUp) => sum + topUp.amount, 0) || 0, [transactions]);
@@ -158,7 +156,6 @@ export default function CashReconciliationPage() {
         const reconciliationData: Omit<Reconciliation, 'id'> = {
             date: formatDate(reconciliationDate),
             locationId: selectedLocationId,
-            sessionId: activeSessionId || undefined,
             expectedCash: expectedCash,
             countedCash: parseFloat(countedCash),
             variance: variance,
@@ -179,7 +176,7 @@ export default function CashReconciliationPage() {
 
             // Add wastage event
             const newWastageRef = doc(collection(db, WASTAGE_EVENTS_COLLECTION));
-            batch.set(newWastageRef, { ...event, sessionId: activeSessionId || undefined });
+            batch.set(newWastageRef, { ...event });
 
             // Update product stock
             const productRef = doc(db, PRODUCTS_COLLECTION, event.productId);
@@ -191,7 +188,7 @@ export default function CashReconciliationPage() {
         },
         onSuccess: () => {
             toast({ title: "Wastage Recorded", description: "Wastage has been logged and stock updated." });
-            queryClient.invalidateQueries({ queryKey: ['transactionsForDate', selectedLocationId, reconciliationDate, activeSessionId] });
+            queryClient.invalidateQueries({ queryKey: ['transactionsForDate', selectedLocationId, reconciliationDate] });
             queryClient.invalidateQueries({ queryKey: [PRODUCTS_COLLECTION] });
             setIsWastageFormOpen(false);
         },
@@ -237,14 +234,6 @@ export default function CashReconciliationPage() {
                     <AlertTitle>No Location Selected</AlertTitle>
                     <AlertDescription>
                         Please select a location from the sidebar to perform a reconciliation.
-                    </AlertDescription>
-                </Alert>
-            ) : !activeSessionId ? (
-                 <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>No Active Session</AlertTitle>
-                    <AlertDescription>
-                        There is no active session for this location. Please start one in Settings to record reconciliations.
                     </AlertDescription>
                 </Alert>
             ) : (

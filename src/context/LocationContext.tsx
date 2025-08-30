@@ -10,7 +10,6 @@ import { collection, onSnapshot } from 'firebase/firestore';
 interface LocationContextType {
   selectedLocationId: string | null;
   setSelectedLocationId: (id: string | null) => void;
-  activeSessionId: string | null; // Added active session ID
 }
 
 const LocationContext = createContext<LocationContextType | undefined>(undefined);
@@ -60,10 +59,8 @@ export function LocationProvider({ children }: { children: ReactNode }) {
     return () => unsub();
   }, [handleSetSelectedLocationId]); // Use the stable callback here
   
-  const activeSessionId = locations.find(loc => loc.id === selectedLocationId)?.activeSessionId || null;
-
   return (
-    <LocationContext.Provider value={{ selectedLocationId, setSelectedLocationId: handleSetSelectedLocationId, activeSessionId }}>
+    <LocationContext.Provider value={{ selectedLocationId, setSelectedLocationId: handleSetSelectedLocationId }}>
       {children}
     </LocationContext.Provider>
   );

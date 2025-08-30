@@ -130,7 +130,7 @@ export function ManageCardDialog({
     try {
         const canvas = await html2canvas(cardElement, { 
             scale: 4, // Increase scale for higher resolution
-            backgroundColor: '#ffffff', // Use solid white background
+            backgroundColor: '#ffffff',
         });
         
         const pngUrl = canvas.toDataURL('image/png');
