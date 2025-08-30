@@ -328,7 +328,7 @@ export default function CustomersPage() {
                   <TableHead>Customer</TableHead>
                   <TableHead>Contact</TableHead>
                   <TableHead>Parent/Guardian</TableHead>
-                  <TableHead>Notes</TableHead>
+                  <TableHead>Health Notes</TableHead>
                   <TableHead className="text-center w-[160px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>

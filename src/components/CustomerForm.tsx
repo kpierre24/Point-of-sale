@@ -81,6 +81,7 @@ export function CustomerForm({ isOpen, onOpenChange, onSave, customerToEdit }: C
         toast({
           title: 'Invalid Parent Email',
           description: 'Please enter a valid email address for the parent.',
+          variant: 'destructive'
         });
         return;
       }
