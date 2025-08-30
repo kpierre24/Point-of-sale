@@ -13,12 +13,13 @@ interface MetricCardProps {
   };
   description?: string;
   className?: string;
-  variant?: 'default' | 'success' | 'warning' | 'error';
+  variant?: 'default' | 'success' | 'warning' | 'error' | 'interactive';
 }
 
 const variantStyles = {
   default: {
     card: "border-border",
+    iconContainer: "bg-primary/10",
     icon: "text-primary",
     trend: {
       positive: "text-emerald-600",
@@ -27,6 +28,7 @@ const variantStyles = {
   },
   success: {
     card: "border-emerald-200 bg-emerald-50/50",
+    iconContainer: "bg-emerald-100",
     icon: "text-emerald-600",
     trend: {
       positive: "text-emerald-700",
@@ -35,6 +37,7 @@ const variantStyles = {
   },
   warning: {
     card: "border-amber-200 bg-amber-50/50",
+    iconContainer: "bg-amber-100",
     icon: "text-amber-600",
     trend: {
       positive: "text-emerald-600",
@@ -43,7 +46,17 @@ const variantStyles = {
   },
   error: {
     card: "border-red-200 bg-red-50/50",
+    iconContainer: "bg-red-100",
     icon: "text-red-600",
+    trend: {
+      positive: "text-emerald-600",
+      negative: "text-red-600"
+    }
+  },
+  interactive: {
+    card: "border-border hover:shadow-card-hover cursor-pointer hover:scale-[1.02] hover:-translate-y-1 active:scale-[0.98] active:translate-y-0",
+    iconContainer: "bg-primary/10",
+    icon: "text-primary",
     trend: {
       positive: "text-emerald-600",
       negative: "text-red-600"
@@ -64,38 +77,33 @@ export function MetricCard({
   
   return (
     <Card className={cn(
-      "transition-all duration-200 hover:shadow-md",
+      "transition-all duration-200",
       styles.card,
       className
     )}>
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {title}
         </CardTitle>
-        <Icon className={cn("h-5 w-5", styles.icon)} />
+         <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", styles.iconContainer)}>
+            <Icon className={cn("h-4 w-4", styles.icon)} />
+         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="flex flex-col space-y-2">
-          <div className="text-3xl font-bold tracking-tight">
-            {value}
-          </div>
-          
+        <div className="text-2xl font-bold tracking-tight">
+          {value}
+        </div>
+        <div className="flex items-center space-x-1">
           {trend && (
-            <div className="flex items-center space-x-1">
-              <span className={cn(
-                "text-sm font-medium",
-                trend.isPositive ? styles.trend.positive : styles.trend.negative
-              )}>
-                {trend.isPositive ? "+" : ""}{trend.value}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                vs last period
-              </span>
-            </div>
+            <span className={cn(
+              "text-xs font-medium",
+              trend.isPositive ? styles.trend.positive : styles.trend.negative
+            )}>
+              {trend.isPositive ? "▲" : "▼"} {trend.value}
+            </span>
           )}
-          
           {description && (
-            <p className="text-xs text-muted-foreground leading-relaxed">
+             <p className="text-xs text-muted-foreground leading-relaxed">
               {description}
             </p>
           )}
