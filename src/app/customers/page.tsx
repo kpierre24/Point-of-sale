@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { UserPlus, Edit, Trash2, Search, ShoppingBag, CreditCard, Download, Loader2 } from 'lucide-react';
+import { UserPlus, Edit, Trash2, Search, ShoppingBag, CreditCard, Download, Loader2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import {
@@ -214,12 +214,13 @@ export default function CustomersPage() {
       toast({ title: "No Data", description: "There are no customers to export.", variant: "destructive" });
       return;
     }
-    const headers = ["ID", "Name", "Email", "Phone", "Address"];
+    const headers = ["ID", "Name", "Email", "Phone", "Address", "Parent Name", "Parent Email", "Allergies", "Dietary Constraints"];
     const csvRows = [
       headers.join(','),
       ...customers.map(customer => [
         escapeCsvField(customer.id), escapeCsvField(customer.name), escapeCsvField(customer.email),
-        escapeCsvField(customer.phone), escapeCsvField(customer.address),
+        escapeCsvField(customer.phone), escapeCsvField(customer.address), escapeCsvField(customer.parentName),
+        escapeCsvField(customer.parentEmail), escapeCsvField(customer.allergies), escapeCsvField(customer.dietaryConstraints)
       ].join(','))
     ];
     const csvString = csvRows.join('\n');
@@ -309,10 +310,10 @@ export default function CustomersPage() {
               {filteredCustomers.length === 0 && <TableCaption>{customers.length > 0 && searchTerm ? 'No customers match your search.' : 'No customers available.'}</TableCaption>}
               <TableHeader className="sticky top-0 bg-card z-10">
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Address</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Parent/Guardian</TableHead>
+                  <TableHead>Notes</TableHead>
                   <TableHead className="text-center w-[160px]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -320,9 +321,25 @@ export default function CustomersPage() {
                 {filteredCustomers.map((customer) => (
                   <TableRow key={customer.id}>
                     <TableCell className="font-medium">{customer.name}</TableCell>
-                    <TableCell>{customer.email || 'N/A'}</TableCell>
-                    <TableCell>{customer.phone || 'N/A'}</TableCell>
-                    <TableCell className="whitespace-pre-wrap max-w-xs truncate" title={customer.address}>{customer.address || 'N/A'}</TableCell>
+                    <TableCell>
+                      {customer.email && <div>{customer.email}</div>}
+                      {customer.phone && <div>{customer.phone}</div>}
+                    </TableCell>
+                    <TableCell>
+                      {customer.parentName && <div>{customer.parentName}</div>}
+                      {customer.parentEmail && <div className="text-sm text-muted-foreground">{customer.parentEmail}</div>}
+                    </TableCell>
+                    <TableCell>
+                      {(customer.allergies || customer.dietaryConstraints) && (
+                        <div className="flex items-start text-red-600" title={`Allergies: ${customer.allergies || 'N/A'}\nConstraints: ${customer.dietaryConstraints || 'N/A'}`}>
+                          <AlertCircle className="h-4 w-4 mr-2 mt-0.5 shrink-0" />
+                          <div className="space-y-1">
+                            {customer.allergies && <p className="text-xs font-semibold">Allergies: {customer.allergies}</p>}
+                            {customer.dietaryConstraints && <p className="text-xs font-semibold">Constraints: {customer.dietaryConstraints}</p>}
+                          </div>
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-center">
                       <div className="flex justify-center items-center space-x-2">
                         <Button variant="outline" size="icon" onClick={() => handleEditCustomer(customer)} disabled={customerMutation.isPending || deleteCustomerMutation.isPending}>

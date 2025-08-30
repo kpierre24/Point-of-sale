@@ -1,4 +1,5 @@
 
+
 import type { PAYMENT_METHODS } from '@/config/constants';
 
 export interface Location {
@@ -28,6 +29,8 @@ export interface Customer {
   createdAt?: string; // ISO Date string
   parentName?: string; // Added for parent's name
   parentEmail?: string; // Added for parent's email
+  allergies?: string; // Added for allergies
+  dietaryConstraints?: string; // Added for dietary constraints
 }
 
 export interface PurchaseOrderItem {

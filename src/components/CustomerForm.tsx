@@ -35,6 +35,8 @@ const defaultCustomer: Omit<Customer, 'id'> = {
   address: '',
   parentName: '',
   parentEmail: '',
+  allergies: '',
+  dietaryConstraints: '',
 };
 
 export function CustomerForm({ isOpen, onOpenChange, onSave, customerToEdit }: CustomerFormProps) {
@@ -137,6 +139,18 @@ export function CustomerForm({ isOpen, onOpenChange, onSave, customerToEdit }: C
                 <Label htmlFor="parentEmail">Parent's Email Address</Label>
                 <Input id="parentEmail" name="parentEmail" type="email" value={customer.parentEmail || ''} onChange={handleChange} placeholder="e.g., parent@example.com" />
               </div>
+
+              <Separator className="my-4" />
+              <h3 className="text-md font-medium text-muted-foreground">Health Information (Optional)</h3>
+              <div>
+                <Label htmlFor="allergies">Allergies</Label>
+                <Textarea id="allergies" name="allergies" value={customer.allergies || ''} onChange={handleChange} placeholder="e.g., Peanuts, Dairy" />
+              </div>
+              <div>
+                <Label htmlFor="dietaryConstraints">Dietary Constraints</Label>
+                <Textarea id="dietaryConstraints" name="dietaryConstraints" value={customer.dietaryConstraints || ''} onChange={handleChange} placeholder="e.g., Gluten-free, Vegan" />
+              </div>
+
             </div>
           </ScrollArea>
           <DialogFooter className="pt-4 mt-2 border-t">
