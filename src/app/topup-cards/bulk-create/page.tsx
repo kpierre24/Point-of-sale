@@ -14,7 +14,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Loader2, Printer, Users } from 'lucide-react';
 import Link from 'next/link';
 import QRCode from 'qrcode.react';
-import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
 const TOPUP_CARDS_COLLECTION = 'topUpCards';
@@ -126,24 +125,24 @@ export default function BulkCreateTopUpCardsPage() {
     }
 
     try {
-        const canvas = await html2canvas(printableElement, { scale: 3 });
+        const canvas = await html2canvas(printableElement, { 
+            scale: 3,
+            backgroundColor: '#ffffff'
+        });
         const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
-        const imgWidth = canvas.width;
-        const imgHeight = canvas.height;
-        const ratio = imgWidth / imgHeight;
-        const newImgWidth = pdfWidth;
-        const newImgHeight = newImgWidth / ratio;
+        
+        const downloadLink = document.createElement('a');
+        downloadLink.href = imgData;
+        downloadLink.download = `bulk-cards-${Date.now()}.png`;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
 
-        pdf.addImage(imgData, 'PNG', 0, 0, newImgWidth, newImgHeight);
-        pdf.save(`bulk-cards-${Date.now()}.pdf`);
-        toast({ title: "PDF Generated", description: "Your PDF with all cards has been downloaded." });
+        toast({ title: "PNG Generated", description: "Your PNG with all cards has been downloaded." });
 
     } catch (error) {
-        console.error("Error generating PDF:", error);
-        toast({ title: "PDF Generation Failed", description: "Could not generate PDF.", variant: "destructive" });
+        console.error("Error generating PNG:", error);
+        toast({ title: "PNG Generation Failed", description: "Could not generate PNG.", variant: "destructive" });
     }
   };
 
@@ -214,7 +213,7 @@ export default function BulkCreateTopUpCardsPage() {
                 <h2 className="text-2xl font-bold">Generated Cards</h2>
                 <Button onClick={handlePrint} variant="outline">
                     <Printer className="mr-2 h-4 w-4" />
-                    Print All as PDF
+                    Download as PNG
                 </Button>
             </div>
             <div ref={printableAreaRef} className="printable-area grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 p-4 bg-white">
