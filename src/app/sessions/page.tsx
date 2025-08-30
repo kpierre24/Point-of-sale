@@ -1,3 +1,4 @@
+
 // src/app/sessions/page.tsx
 "use client";
 
@@ -42,9 +43,9 @@ export default function SessionsPage() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
 
-    const { data: locations = [], isLoading: isLoadingLocations } = useQuery({ queryKey: [LOCATIONS_COLLECTION], queryFn: fetchLocations });
-    const { data: sessions = [], isLoading: isLoadingSessions } = useQuery({ queryKey: [SESSIONS_COLLECTION], queryFn: fetchSessions });
-    const { data: products = [], isLoading: isLoadingProducts } = useQuery({ queryKey: [PRODUCTS_COLLECTION], queryFn: fetchProducts });
+    const { data: locations = [], isLoading: isLoadingLocations } = useQuery<Location[], Error>({ queryKey: [LOCATIONS_COLLECTION], queryFn: fetchLocations });
+    const { data: sessions = [], isLoading: isLoadingSessions } = useQuery<Session[], Error>({ queryKey: [SESSIONS_COLLECTION], queryFn: fetchSessions });
+    const { data: products = [], isLoading: isLoadingProducts } = useQuery<Product[], Error>({ queryKey: [PRODUCTS_COLLECTION], queryFn: fetchProducts });
 
     const newSessionMutation = useMutation<void, Error, { location: Location }>({
         mutationFn: async ({ location }) => {
@@ -200,3 +201,4 @@ export default function SessionsPage() {
         </ProtectedComponent>
     );
 }
+
