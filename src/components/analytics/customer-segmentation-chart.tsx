@@ -9,7 +9,7 @@ interface CustomerSegmentationChartProps {
     count: number
     revenue: number
     avgOrderValue: number
-    color: string
+    color?: string
   }>
 }
 
@@ -24,6 +24,14 @@ export function CustomerSegmentationChart({ data }: CustomerSegmentationChartPro
     setActiveIndex(null)
   }
 
+  const COLORS = ['#8B5CF6', '#06B6D4', '#10B981', '#F59E0B', '#EF4444', '#3B82F6'];
+  const fallbackColor = "#6B7280"; // Neutral gray fallback
+
+  const chartData = data.map((entry, index) => ({
+    ...entry,
+    color: entry.color || COLORS[index % COLORS.length] || fallbackColor,
+  }));
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Customer Count Pie Chart */}
@@ -33,7 +41,7 @@ export function CustomerSegmentationChart({ data }: CustomerSegmentationChartPro
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
-                data={data}
+                data={chartData}
                 cx="50%"
                 cy="50%"
                 innerRadius={40}
@@ -43,9 +51,9 @@ export function CustomerSegmentationChart({ data }: CustomerSegmentationChartPro
                 onMouseEnter={onPieEnter}
                 onMouseLeave={onPieLeave}
               >
-                {data.map((entry, index) => (
+                {chartData.map((entry, index) => (
                   <Cell 
-                    key={`cell-${index}`} 
+                    key={`cell-count-${index}`} 
                     fill={entry.color}
                     stroke={activeIndex === index ? "#000" : "none"}
                     strokeWidth={activeIndex === index ? 2 : 0}
@@ -80,7 +88,7 @@ export function CustomerSegmentationChart({ data }: CustomerSegmentationChartPro
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
-                data={data}
+                data={chartData}
                 cx="50%"
                 cy="50%"
                 innerRadius={40}
@@ -90,9 +98,9 @@ export function CustomerSegmentationChart({ data }: CustomerSegmentationChartPro
                 onMouseEnter={onPieEnter}
                 onMouseLeave={onPieLeave}
               >
-                {data.map((entry, index) => (
+                {chartData.map((entry, index) => (
                   <Cell 
-                    key={`cell-${index}`} 
+                    key={`cell-revenue-${index}`} 
                     fill={entry.color}
                     stroke={activeIndex === index ? "#000" : "none"}
                     strokeWidth={activeIndex === index ? 2 : 0}
@@ -103,7 +111,8 @@ export function CustomerSegmentationChart({ data }: CustomerSegmentationChartPro
                 content={({ active, payload }) => {
                   if (active && payload && payload.length) {
                     const data = payload[0].payload
-                    const percentage = ((data.revenue / data.reduce((sum: number, item: any) => sum + item.revenue, 0)) * 100).toFixed(1)
+                    const totalRevenue = chartData.reduce((sum: number, item: any) => sum + item.revenue, 0)
+                    const percentage = totalRevenue > 0 ? ((data.revenue / totalRevenue) * 100).toFixed(1) : 0;
                     return (
                       <div className="bg-white p-3 border rounded-lg shadow-lg">
                         <p className="font-medium">{data.segment}</p>
