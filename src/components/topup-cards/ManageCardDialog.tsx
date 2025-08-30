@@ -25,7 +25,6 @@ import { format } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PAYMENT_METHODS } from '@/config/constants';
 import { useLocation } from '@/context/LocationContext';
-import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
 
@@ -129,23 +128,23 @@ export function ManageCardDialog({
         return;
     }
     try {
-        const canvas = await html2canvas(cardElement, { scale: 3, backgroundColor: null });
-        const imgData = canvas.toDataURL('image/png');
-
-        // Dimensions of a credit card in mm (85.6mm x 53.98mm)
-        const pdf = new jsPDF({
-            orientation: 'landscape',
-            unit: 'mm',
-            format: [85.6, 53.98]
+        const canvas = await html2canvas(cardElement, { 
+            scale: 4, // Increase scale for higher resolution
+            backgroundColor: null, // Use transparent background
         });
+        
+        const pngUrl = canvas.toDataURL('image/png');
+        const downloadLink = document.createElement('a');
+        downloadLink.href = pngUrl;
+        downloadLink.download = `printable-card-${card.cardId}.png`;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
 
-        pdf.addImage(imgData, 'PNG', 0, 0, 85.6, 53.98);
-        pdf.save(`topup-card-${card.cardId}.pdf`);
-
-        toast({ title: 'PDF Generated', description: 'Your card PDF has been downloaded.' });
+        toast({ title: 'PNG Generated', description: 'Your card PNG has been downloaded.' });
     } catch (error) {
-        console.error("Error generating PDF:", error);
-        toast({ title: 'PDF Generation Error', description: 'Could not generate PDF for the card.', variant: 'destructive' });
+        console.error("Error generating PNG:", error);
+        toast({ title: 'PNG Generation Error', description: 'Could not generate PNG for the card.', variant: 'destructive' });
     }
   };
 
@@ -269,7 +268,7 @@ export function ManageCardDialog({
             </div>
           </ScrollArea>
           <DialogFooter className="pt-4 mt-2 border-t">
-            <Button variant="outline" onClick={handlePrintCard}><Printer className="mr-2 h-4 w-4"/> Print Card</Button>
+            <Button variant="outline" onClick={handlePrintCard}><Printer className="mr-2 h-4 w-4"/> Download as PNG</Button>
             <DialogClose asChild>
               <Button type="button" variant="outline">Close</Button>
             </DialogClose>
@@ -277,7 +276,8 @@ export function ManageCardDialog({
         </DialogContent>
       </Dialog>
       
-      <div className="print-only" style={{ position: 'fixed', left: '-9999px', top: '-9999px' }}>
+      {/* This element is only for rendering the printable card off-screen */}
+      <div className="fixed" style={{ left: '-9999px', top: '-9999px' }}>
           <div ref={cardPrintRef} className="card-design-print">
               <div className="card-header-print">
                   <User className="h-6 w-6"/>
