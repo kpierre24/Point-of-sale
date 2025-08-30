@@ -10,7 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, writeBatch, query, where, orderBy } from 'firebase/firestore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, PlayCircle, Archive, MapPin, Calendar, CheckCircle } from 'lucide-react';
+import { Loader2, PlayCircle, Archive, MapPin, Calendar, CheckCircle, AlertCircle as AlertCircleIcon } from 'lucide-react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ProtectedComponent, PERMISSIONS } from '@/hooks/use-permissions';
@@ -74,7 +74,7 @@ export default function SessionsPage() {
             const now = new Date();
             const newSession: Session = {
                 id: newSessionId,
-                locationId: location.id,
+                locationId: location.id, // Ensure locationId is set
                 startDate: startOfMonth(now).toISOString(),
                 name: `${location.name} - ${format(now, 'MMMM yyyy')}`,
                 status: 'active',
@@ -122,7 +122,7 @@ export default function SessionsPage() {
     if (isError) {
         return (
             <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
+                <AlertCircleIcon className="h-4 w-4" />
                 <AlertTitle>Error Loading Data</AlertTitle>
                 <AlertDescription>
                     Could not load session management data. Please try again later.
