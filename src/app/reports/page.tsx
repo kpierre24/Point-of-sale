@@ -1,3 +1,4 @@
+
 // src/app/reports/page.tsx
 "use client";
 
@@ -16,6 +17,7 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, query as firestoreQuery, where, orderBy } from 'firebase/firestore';
 import { useQuery } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { useLocation } from '@/context/LocationContext';
 
 const SALES_COLLECTION = 'sales';
 const USERS_COLLECTION = 'users';
@@ -32,7 +34,7 @@ const formatCurrency = (amount: number) => {
 };
 
 // Fetcher functions
-const fetchAllSalesForReport = async (startDate?: Date, endDate?: Date): Promise<SoldProduct[]> => {
+const fetchAllSalesForReport = async (startDate?: Date, endDate?: Date, sessionId?: string | null): Promise<SoldProduct[]> => {
   if (!db) throw new Error("Firestore not available");
   const salesCol = collection(db, SALES_COLLECTION);
   let q = firestoreQuery(salesCol, orderBy("timestamp", "desc"));
@@ -46,9 +48,15 @@ const fetchAllSalesForReport = async (startDate?: Date, endDate?: Date): Promise
     q = firestoreQuery(q, where("timestamp", "<=", endOfDayEndDate.toISOString()));
   }
 
+  // Filter by session if one is active/provided
+  if (sessionId) {
+    q = firestoreQuery(q, where("sessionId", "==", sessionId));
+  }
+
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SoldProduct));
 };
+
 
 const fetchAllStaff = async (): Promise<AppUser[]> => {
   if (!db) throw new Error("Firestore not available");
@@ -72,6 +80,7 @@ const fetchProducts = async (): Promise<Product[]> => {
 
 export default function ReportsPage() {
   const { toast } = useToast();
+  const { activeSessionId } = useLocation();
   const [reportType, setReportType] = useState<ReportType>('');
   const [selectedStaffId, setSelectedStaffId] = useState<string>('all');
   const [selectedLocationId, setSelectedLocationId] = useState<string>('all');
@@ -128,7 +137,7 @@ export default function ReportsPage() {
     setReportTitle('Generating report...');
 
     try {
-        const fetchedSales = await fetchAllSalesForReport(startDate, endDate);
+        const fetchedSales = await fetchAllSalesForReport(startDate, endDate, activeSessionId);
         let data: ReportDataItem[] = [];
         let title = '';
 

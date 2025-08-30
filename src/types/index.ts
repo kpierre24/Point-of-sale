@@ -1,3 +1,4 @@
+
 // src/types/index.ts
 
 import type { PAYMENT_METHODS } from '@/config/constants';

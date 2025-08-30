@@ -1,3 +1,4 @@
+
 // src/app/purchases/page.tsx
 "use client";
 
@@ -10,9 +11,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { PlusCircle, PackagePlus, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch, query as firestoreQuery, orderBy } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, writeBatch, query as firestoreQuery, orderBy, where } from 'firebase/firestore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocation } from '@/context/LocationContext';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const PURCHASE_ORDERS_COLLECTION = 'purchaseOrders';
 const PRODUCTS_COLLECTION = 'products';
@@ -20,10 +22,15 @@ const SALES_COLLECTION = 'sales';
 const LOCATIONS_COLLECTION = 'locations';
 
 // Fetcher functions
-const fetchPurchaseOrders = async (): Promise<PurchaseOrder[]> => {
+const fetchPurchaseOrders = async (activeSessionId?: string | null): Promise<PurchaseOrder[]> => {
   if (!db) throw new Error("Firestore not available");
   const poCol = collection(db, PURCHASE_ORDERS_COLLECTION);
-  const q = firestoreQuery(poCol, orderBy("orderDate", "desc"));
+  let q = firestoreQuery(poCol, orderBy("orderDate", "desc"));
+
+  if (activeSessionId) {
+    q = firestoreQuery(q, where("sessionId", "==", activeSessionId));
+  }
+
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PurchaseOrder));
 };
@@ -35,10 +42,16 @@ const fetchProducts = async (): Promise<Product[]> => {
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
 };
 
-const fetchSales = async (): Promise<SoldProduct[]> => {
+const fetchSales = async (activeSessionId?: string | null): Promise<SoldProduct[]> => {
   if (!db) throw new Error("Firestore not available");
   const salesCol = collection(db, SALES_COLLECTION);
-  const snapshot = await getDocs(salesCol);
+  let q = firestoreQuery(salesCol, orderBy("timestamp", "desc"));
+  
+  if (activeSessionId) {
+    q = firestoreQuery(q, where("sessionId", "==", activeSessionId));
+  }
+
+  const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SoldProduct));
 };
 
@@ -54,12 +67,12 @@ export default function PurchasesPage() {
   const [purchaseOrderToEdit, setPurchaseOrderToEdit] = useState<PurchaseOrder | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { selectedLocationId } = useLocation();
+  const { selectedLocationId, activeSessionId } = useLocation();
 
   const { data: purchaseOrders = [], isLoading: isLoadingPOs, isError: isPOsError, error: posError } = useQuery<PurchaseOrder[], Error>({
-    queryKey: [PURCHASE_ORDERS_COLLECTION],
-    queryFn: fetchPurchaseOrders,
-    enabled: !!db,
+    queryKey: [PURCHASE_ORDERS_COLLECTION, activeSessionId],
+    queryFn: () => fetchPurchaseOrders(activeSessionId),
+    enabled: !!db && !!activeSessionId,
   });
 
   const { data: products = [], isLoading: isLoadingProducts, isError: isProductsError, error: productsError } = useQuery<Product[], Error>({
@@ -69,9 +82,9 @@ export default function PurchasesPage() {
   });
 
   const { data: sales = [], isLoading: isLoadingSales, isError: isSalesError, error: salesError } = useQuery<SoldProduct[], Error>({
-    queryKey: [SALES_COLLECTION],
-    queryFn: fetchSales,
-    enabled: !!db,
+    queryKey: [SALES_COLLECTION, activeSessionId],
+    queryFn: () => fetchSales(activeSessionId),
+    enabled: !!db && !!activeSessionId,
   });
   
   const { data: locations = [], isLoading: isLoadingLocations, isError: isLocationsError, error: locationsError } = useQuery<Location[], Error>({
@@ -127,7 +140,10 @@ export default function PurchasesPage() {
     mutationFn: async ({ orderData, isEditing, originalOrder }) => {
       if (!db) throw new Error("Firestore not available");
       
-      const orderToSave: Partial<PurchaseOrder> = { ...orderData };
+      const orderToSave: Partial<PurchaseOrder> = { 
+        ...orderData,
+        sessionId: activeSessionId || undefined,
+      };
       Object.keys(orderToSave).forEach(keyStr => {
         const key = keyStr as keyof typeof orderToSave;
         if ((orderToSave as any)[key] === undefined) {
@@ -147,7 +163,7 @@ export default function PurchasesPage() {
       }
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: [PURCHASE_ORDERS_COLLECTION] });
+      queryClient.invalidateQueries({ queryKey: [PURCHASE_ORDERS_COLLECTION, activeSessionId] });
       toast({ title: variables.isEditing ? 'Purchase Order Updated' : 'Purchase Order Added', description: `Order from ${variables.orderData.supplierName} has been saved.` });
       setIsFormOpen(false);
       setPurchaseOrderToEdit(null);
@@ -167,7 +183,7 @@ export default function PurchasesPage() {
       await deleteDoc(doc(db, PURCHASE_ORDERS_COLLECTION, orderId));
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [PURCHASE_ORDERS_COLLECTION] });
+      queryClient.invalidateQueries({ queryKey: [PURCHASE_ORDERS_COLLECTION, activeSessionId] });
       toast({ title: 'Purchase Order Deleted', description: 'The purchase order has been removed.', variant: 'destructive' });
     },
     onError: (error) => {
@@ -184,6 +200,10 @@ export default function PurchasesPage() {
   const handleAddNewPurchaseOrder = () => {
     if (!selectedLocationId) {
         toast({ title: "No Location Selected", description: "Please select a location from the sidebar before adding a purchase order.", variant: "destructive" });
+        return;
+    }
+    if (!activeSessionId) {
+        toast({ title: "No Active Session", description: "There is no active session for this location. Please start one in Settings.", variant: "destructive" });
         return;
     }
     setPurchaseOrderToEdit(null);
@@ -226,11 +246,19 @@ export default function PurchasesPage() {
             Manage inventory purchases for your locations. Data is stored in Firestore.
           </p>
         </div>
-        <Button onClick={handleAddNewPurchaseOrder} disabled={purchaseOrderMutation.isPending}>
+        <Button onClick={handleAddNewPurchaseOrder} disabled={purchaseOrderMutation.isPending || !activeSessionId}>
           <PlusCircle className="mr-2 h-4 w-4" />
           Add Purchase Order
         </Button>
       </header>
+       {!activeSessionId && selectedLocationId && (
+          <Alert variant="default" className="mt-4">
+            <AlertTitle>No Active Session</AlertTitle>
+            <AlertDescription>
+              There is no active session for this location. Please start a new session in the Settings to manage purchase orders.
+            </AlertDescription>
+          </Alert>
+        )}
 
       <PurchaseOrderForm
         isOpen={isFormOpen}

@@ -1,3 +1,4 @@
+
 // src/app/sales/page.tsx
 "use client";
 
@@ -46,13 +47,20 @@ const escapeCsvField = (field: any): string => {
 };
 
 // Fetcher functions
-const fetchSales = async (): Promise<SoldProduct[]> => {
+const fetchSales = async (activeSessionId?: string | null): Promise<SoldProduct[]> => {
   if (!db) throw new Error("Firestore not available");
   const salesCol = collection(db, SALES_COLLECTION);
-  const q = firestoreQuery(salesCol, orderBy("timestamp", "desc"));
+  let q = firestoreQuery(salesCol, orderBy("timestamp", "desc"));
+  
+  // Filter by active session if provided
+  if (activeSessionId) {
+    q = firestoreQuery(q, where("sessionId", "==", activeSessionId));
+  }
+
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SoldProduct));
 };
+
 
 const fetchProducts = async (): Promise<Product[]> => {
   if (!db) throw new Error("Firestore not available");
@@ -82,12 +90,12 @@ export default function SalesPage() {
   const receiptComponentRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { selectedLocationId } = useLocation();
+  const { selectedLocationId, activeSessionId } = useLocation();
 
   const { data: soldItems = [], isLoading: isLoadingSales, isError: isSalesError, error: salesError } = useQuery<SoldProduct[], Error>({
-    queryKey: [SALES_COLLECTION],
-    queryFn: fetchSales,
-    enabled: !!db,
+    queryKey: [SALES_COLLECTION, activeSessionId], // Add activeSessionId to queryKey
+    queryFn: () => fetchSales(activeSessionId),
+    enabled: !!db && !!activeSessionId, // Only fetch if there's an active session
   });
 
   const { data: products = [], isLoading: isLoadingProducts, isError: isProductsError, error: productsError } = useQuery<Product[], Error>({
@@ -125,6 +133,7 @@ export default function SalesPage() {
         ...newSaleData,
         id: crypto.randomUUID(),
         timestamp: new Date().toISOString(),
+        sessionId: activeSessionId || undefined,
       };
       
       Object.keys(saleToSave).forEach(keyStr => {
@@ -170,6 +179,7 @@ export default function SalesPage() {
             balanceAfter: newBalance,
             staffMember: 'Staff User',
             notes: `Sale: ${saleToSave.name} x${saleToSave.quantity}`,
+            sessionId: activeSessionId || undefined,
         };
         const transactionRef = doc(collection(db, CARD_TRANSACTIONS_COLLECTION));
         batch.set(transactionRef, newTransaction);
@@ -179,7 +189,7 @@ export default function SalesPage() {
       return saleToSave;
     },
     onSuccess: (newSaleResult) => { 
-      queryClient.invalidateQueries({ queryKey: [SALES_COLLECTION] });
+      queryClient.invalidateQueries({ queryKey: [SALES_COLLECTION, activeSessionId] });
       queryClient.invalidateQueries({ queryKey: [PRODUCTS_COLLECTION] });
       queryClient.invalidateQueries({ queryKey: [TOPUP_CARDS_COLLECTION] });
       queryClient.invalidateQueries({ queryKey: [CARD_TRANSACTIONS_COLLECTION] });
@@ -292,7 +302,7 @@ export default function SalesPage() {
             </Alert>
           )}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-            <div className={`lg:col-span-2 ${!selectedLocationId ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className={`lg:col-span-2 ${!selectedLocationId || !activeSessionId ? 'opacity-50 pointer-events-none' : ''}`}>
               <SaleForm 
                 onRecordSale={handleRecordSale} 
                 soldItemsForAISuggestion={soldItems.slice(0, 10).map(item => ({ name: item.name, price: item.price }))}
@@ -302,6 +312,14 @@ export default function SalesPage() {
                 isSubmittingSale={recordSaleMutation.isPending}
                 selectedLocationId={selectedLocationId}
               />
+               {!activeSessionId && selectedLocationId && (
+                <Alert variant="default" className="mt-4">
+                  <AlertTitle>No Active Session</AlertTitle>
+                  <AlertDescription>
+                    There is no active session for this location. Please start a new session in the Settings to record sales.
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
             <div className="lg:col-span-3">
               <Card className="shadow-lg">

@@ -1,3 +1,4 @@
+
 // src/components/topup-cards/ManageCardDialog.tsx
 "use client";
 
@@ -165,7 +166,7 @@ export function ManageCardDialog({
                             <SelectValue placeholder="Select method"/>
                           </SelectTrigger>
                           <SelectContent>
-                              {PAYMENT_METHODS.map(method => (
+                              {PAYMENT_METHODS.filter(m => m !== 'Top-Up Card').map(method => (
                                   <SelectItem key={method} value={method}>{method}</SelectItem>
                               ))}
                           </SelectContent>

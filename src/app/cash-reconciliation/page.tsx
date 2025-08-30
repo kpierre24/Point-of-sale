@@ -1,3 +1,4 @@
+
 // src/app/cash-reconciliation/page.tsx
 "use client";
 
@@ -46,42 +47,26 @@ const fetchProducts = async (): Promise<Product[]> => {
 };
 
 
-const fetchTransactionsForDate = async (locationId: string, date: Date) => {
+const fetchTransactionsForDate = async (locationId: string, date: Date, sessionId: string | null) => {
     if (!db) throw new Error("Firestore not available");
+    if (!sessionId) return { cashSales: [], cashTopUps: [], pettyCashTransactions: [], wastageEvents: [] };
 
     const start = startOfDay(date);
     const end = endOfDay(date);
 
-    const salesQuery = firestoreQuery(
-        collection(db, SALES_COLLECTION),
+    const baseQuery = (collectionName: string) => firestoreQuery(
+        collection(db, collectionName),
         where("locationId", "==", locationId),
-        where("paymentMethod", "==", "Cash"),
-        where("timestamp", ">=", start.toISOString()),
-        where("timestamp", "<=", end.toISOString())
-    );
-    
-    const topUpsQuery = firestoreQuery(
-        collection(db, CARD_TRANSACTIONS_COLLECTION),
-        where("locationId", "==", locationId),
-        where("paymentMethod", "==", "Cash"),
-        where("type", "in", ["Top-Up", "Creation"]),
+        where("sessionId", "==", sessionId),
         where("timestamp", ">=", start.toISOString()),
         where("timestamp", "<=", end.toISOString())
     );
 
-    const pettyCashQuery = firestoreQuery(
-        collection(db, PETTY_CASH_COLLECTION),
-        where("locationId", "==", locationId),
-        where("timestamp", ">=", start.toISOString()),
-        where("timestamp", "<=", end.toISOString())
-    );
+    const salesQuery = firestoreQuery(baseQuery(SALES_COLLECTION), where("paymentMethod", "==", "Cash"));
+    const topUpsQuery = firestoreQuery(baseQuery(CARD_TRANSACTIONS_COLLECTION), where("paymentMethod", "==", "Cash"), where("type", "in", ["Top-Up", "Creation"]));
+    const pettyCashQuery = baseQuery(PETTY_CASH_COLLECTION);
+    const wastageQuery = baseQuery(WASTAGE_EVENTS_COLLECTION);
     
-    const wastageQuery = firestoreQuery(
-        collection(db, WASTAGE_EVENTS_COLLECTION),
-        where("locationId", "==", locationId),
-        where("timestamp", ">=", start.toISOString()),
-        where("timestamp", "<=", end.toISOString())
-    );
 
     const [salesSnapshot, topUpsSnapshot, pettyCashSnapshot, wastageSnapshot] = await Promise.all([
         getDocs(salesQuery),
@@ -101,7 +86,7 @@ const fetchTransactionsForDate = async (locationId: string, date: Date) => {
 export default function CashReconciliationPage() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
-    const { selectedLocationId } = useLocation();
+    const { selectedLocationId, activeSessionId } = useLocation();
     
     const [reconciliationDate, setReconciliationDate] = useState<Date | undefined>(new Date());
     const [countedCash, setCountedCash] = useState<string>('');
@@ -120,16 +105,16 @@ export default function CashReconciliationPage() {
     });
 
     const { data: transactions, isLoading: isLoadingTransactions, refetch } = useQuery({
-        queryKey: ['transactionsForDate', selectedLocationId, reconciliationDate],
-        queryFn: () => fetchTransactionsForDate(selectedLocationId!, reconciliationDate!),
-        enabled: !!selectedLocationId && !!reconciliationDate && !!db,
+        queryKey: ['transactionsForDate', selectedLocationId, reconciliationDate, activeSessionId],
+        queryFn: () => fetchTransactionsForDate(selectedLocationId!, reconciliationDate!, activeSessionId),
+        enabled: !!selectedLocationId && !!reconciliationDate && !!db && !!activeSessionId,
     });
     
     useEffect(() => {
-        if(selectedLocationId && reconciliationDate) {
+        if(selectedLocationId && reconciliationDate && activeSessionId) {
             refetch();
         }
-    }, [selectedLocationId, reconciliationDate, refetch]);
+    }, [selectedLocationId, reconciliationDate, activeSessionId, refetch]);
     
     const totalCashSales = useMemo(() => transactions?.cashSales.reduce((sum, sale) => sum + sale.total, 0) || 0, [transactions]);
     const totalCashTopUps = useMemo(() => transactions?.cashTopUps.reduce((sum, topUp) => sum + topUp.amount, 0) || 0, [transactions]);
@@ -173,6 +158,7 @@ export default function CashReconciliationPage() {
         const reconciliationData: Omit<Reconciliation, 'id'> = {
             date: formatDate(reconciliationDate),
             locationId: selectedLocationId,
+            sessionId: activeSessionId || undefined,
             expectedCash: expectedCash,
             countedCash: parseFloat(countedCash),
             variance: variance,
@@ -193,7 +179,7 @@ export default function CashReconciliationPage() {
 
             // Add wastage event
             const newWastageRef = doc(collection(db, WASTAGE_EVENTS_COLLECTION));
-            batch.set(newWastageRef, event);
+            batch.set(newWastageRef, { ...event, sessionId: activeSessionId || undefined });
 
             // Update product stock
             const productRef = doc(db, PRODUCTS_COLLECTION, event.productId);
@@ -205,7 +191,7 @@ export default function CashReconciliationPage() {
         },
         onSuccess: () => {
             toast({ title: "Wastage Recorded", description: "Wastage has been logged and stock updated." });
-            queryClient.invalidateQueries({ queryKey: ['transactionsForDate', selectedLocationId, reconciliationDate] });
+            queryClient.invalidateQueries({ queryKey: ['transactionsForDate', selectedLocationId, reconciliationDate, activeSessionId] });
             queryClient.invalidateQueries({ queryKey: [PRODUCTS_COLLECTION] });
             setIsWastageFormOpen(false);
         },
@@ -245,7 +231,7 @@ export default function CashReconciliationPage() {
                 </div>
             </header>
 
-            {!selectedLocationId && (
+            {!selectedLocationId ? (
                 <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>No Location Selected</AlertTitle>
@@ -253,9 +239,16 @@ export default function CashReconciliationPage() {
                         Please select a location from the sidebar to perform a reconciliation.
                     </AlertDescription>
                 </Alert>
-            )}
-
-            <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 ${!selectedLocationId ? 'opacity-50 pointer-events-none' : ''}`}>
+            ) : !activeSessionId ? (
+                 <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>No Active Session</AlertTitle>
+                    <AlertDescription>
+                        There is no active session for this location. Please start one in Settings to record reconciliations.
+                    </AlertDescription>
+                </Alert>
+            ) : (
+            <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8`}>
                 <Card className="lg:col-span-1">
                     <CardHeader>
                         <CardTitle>Reconciliation for {selectedLocationName}</CardTitle>
@@ -399,6 +392,7 @@ export default function CashReconciliationPage() {
                     </CardContent>
                 </Card>
             </div>
+            )}
         </div>
     );
 }
