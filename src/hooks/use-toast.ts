@@ -228,7 +228,7 @@ function useToast() {
   const deleteSuccess = (itemName: string = "Item") => {
     return success(
       `${itemName} Deleted`,
-      `${itemName} has been successfully deleted.`
+      `${itemName} has been successfully removed.`
     )
   }
 

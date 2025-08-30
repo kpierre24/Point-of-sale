@@ -28,19 +28,14 @@ const inputVariants = cva(
 export interface InputProps
   extends Omit<React.ComponentProps<"input">, "size">,
     VariantProps<typeof inputVariants> {
-  error?: boolean
-  success?: boolean
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, variant, size, type, error, success, ...props }, ref) => {
-    // Determine variant based on error/success props
-    const computedVariant = error ? "error" : success ? "success" : variant
-
+  ({ className, variant, size, type, ...props }, ref) => {
     return (
       <input
         type={type}
-        className={cn(inputVariants({ variant: computedVariant, size, className }))}
+        className={cn(inputVariants({ variant, size, className }))}
         ref={ref}
         {...props}
       />
