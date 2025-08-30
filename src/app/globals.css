@@ -496,7 +496,7 @@ body {
     flex-direction: column !important;
     justify-content: space-between !important;
     font-family: Arial, sans-serif !important;
-    box-sizing: border-box;
+    box-sizing: border-box !important;
     -webkit-print-color-adjust: exact;
     color-adjust: exact;
   }
