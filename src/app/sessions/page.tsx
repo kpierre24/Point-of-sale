@@ -19,33 +19,43 @@ const LOCATIONS_COLLECTION = 'locations';
 const SESSIONS_COLLECTION = 'sessions';
 const PRODUCTS_COLLECTION = 'products';
 
-// Fetcher functions
-const fetchLocations = async (): Promise<Location[]> => {
-    if (!db) throw new Error("Firestore not available");
-    const snapshot = await getDocs(collection(db, LOCATIONS_COLLECTION));
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location));
-};
+interface SessionPageData {
+    locations: Location[];
+    sessions: Session[];
+    products: Product[];
+}
 
-const fetchSessions = async (): Promise<Session[]> => {
+// Combined fetcher function
+const fetchSessionData = async (): Promise<SessionPageData> => {
     if (!db) throw new Error("Firestore not available");
-    const snapshot = await getDocs(query(collection(db, SESSIONS_COLLECTION), orderBy("startDate", "desc")));
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Session));
-};
 
-const fetchProducts = async (): Promise<Product[]> => {
-    if (!db) throw new Error("Firestore not available");
-    const snapshot = await getDocs(collection(db, PRODUCTS_COLLECTION));
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product));
-};
+    const locationsQuery = collection(db, LOCATIONS_COLLECTION);
+    const sessionsQuery = query(collection(db, SESSIONS_COLLECTION), orderBy("startDate", "desc"));
+    const productsQuery = collection(db, PRODUCTS_COLLECTION);
 
+    const [locationsSnapshot, sessionsSnapshot, productsSnapshot] = await Promise.all([
+        getDocs(locationsQuery),
+        getDocs(sessionsQuery),
+        getDocs(productsQuery)
+    ]);
+
+    return {
+        locations: locationsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location)),
+        sessions: sessionsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Session)),
+        products: productsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Product)),
+    };
+};
 
 export default function SessionsPage() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
 
-    const { data: locations = [], isLoading: isLoadingLocations } = useQuery<Location[], Error>({ queryKey: [LOCATIONS_COLLECTION], queryFn: fetchLocations });
-    const { data: sessions = [], isLoading: isLoadingSessions } = useQuery<Session[], Error>({ queryKey: [SESSIONS_COLLECTION], queryFn: fetchSessions });
-    const { data: products = [], isLoading: isLoadingProducts } = useQuery<Product[], Error>({ queryKey: [PRODUCTS_COLLECTION], queryFn: fetchProducts });
+    const { data, isLoading, isError, error } = useQuery<SessionPageData, Error>({
+        queryKey: ['sessionData'],
+        queryFn: fetchSessionData
+    });
+    
+    const { locations = [], sessions = [], products = [] } = data || {};
 
     const newSessionMutation = useMutation<void, Error, { location: Location }>({
         mutationFn: async ({ location }) => {
@@ -86,9 +96,7 @@ export default function SessionsPage() {
             await batch.commit();
         },
         onSuccess: (_, { location }) => {
-            queryClient.invalidateQueries({ queryKey: [LOCATIONS_COLLECTION] });
-            queryClient.invalidateQueries({ queryKey: [SESSIONS_COLLECTION] });
-            queryClient.invalidateQueries({ queryKey: [PRODUCTS_COLLECTION] });
+            queryClient.invalidateQueries({ queryKey: ['sessionData'] });
             toast({
                 title: "New Session Started",
                 description: `A new session has been started for ${location.name}. Stock has been reset.`,
@@ -103,14 +111,25 @@ export default function SessionsPage() {
         },
     });
 
-    const isLoading = isLoadingLocations || isLoadingSessions || isLoadingProducts;
-
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-full">
                 <Loader2 className="h-12 w-12 animate-spin text-primary" />
             </div>
         );
+    }
+    
+    if (isError) {
+        return (
+            <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error Loading Data</AlertTitle>
+                <AlertDescription>
+                    Could not load session management data. Please try again later.
+                    <p className="text-xs mt-2">{error?.message}</p>
+                </AlertDescription>
+            </Alert>
+        )
     }
 
     return (
@@ -201,4 +220,3 @@ export default function SessionsPage() {
         </ProtectedComponent>
     );
 }
-
