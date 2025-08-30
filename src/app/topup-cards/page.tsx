@@ -62,6 +62,7 @@ export default function TopUpCardsPage() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isManageDialogOpen, setIsManageDialogOpen] = useState(false);
   const [selectedCard, setSelectedCard] = useState<TopUpCard | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   
   const [isScannerActive, setIsScannerActive] = useState(false);
   const [manualCardIdInput, setManualCardIdInput] = useState('');
@@ -218,6 +219,8 @@ export default function TopUpCardsPage() {
 
   const handleManageCard = (cardToManage: TopUpCard) => {
     setSelectedCard(cardToManage);
+    const customer = customers.find(c => c.id === cardToManage.customerId);
+    setSelectedCustomer(customer || null);
     setIsManageDialogOpen(true);
   };
 
@@ -395,6 +398,7 @@ export default function TopUpCardsPage() {
           isOpen={isManageDialogOpen}
           onOpenChange={setIsManageDialogOpen}
           card={selectedCard}
+          customer={selectedCustomer}
           transactions={selectedCardTransactions}
           onTopUp={handleTopUp}
           onDeduct={handleDeduct}
@@ -520,4 +524,5 @@ export default function TopUpCardsPage() {
     </div>
   );
 }
+
 

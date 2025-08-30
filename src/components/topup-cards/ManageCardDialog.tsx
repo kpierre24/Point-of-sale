@@ -3,7 +3,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from 'react';
-import type { TopUpCard, CardTransaction, PaymentMethod } from '@/types';
+import type { TopUpCard, CardTransaction, PaymentMethod, Customer } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,7 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCaption } from '@/components/ui/table';
 import QRCodeStyling from 'qrcode.react';
-import { Download, DollarSign, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { Download, DollarSign, ArrowDownCircle, ArrowUpCircle, Printer, User } from 'lucide-react';
 import { format } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PAYMENT_METHODS } from '@/config/constants';
@@ -32,6 +32,7 @@ interface ManageCardDialogProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   card: TopUpCard | null;
+  customer?: Customer | null;
   transactions: CardTransaction[];
   onTopUp: (cardToUpdate: TopUpCard, amount: number, notes?: string, paymentMethod?: PaymentMethod, locationId?: string) => void;
   onDeduct: (cardToUpdate: TopUpCard, amount: number, notes?: string) => boolean; // Returns true if successful
@@ -45,6 +46,7 @@ export function ManageCardDialog({
   isOpen,
   onOpenChange,
   card,
+  customer,
   transactions,
   onTopUp,
   onDeduct,
@@ -56,6 +58,7 @@ export function ManageCardDialog({
   const [deductAmount, setDeductAmount] = useState('');
   const [deductNotes, setDeductNotes] = useState('');
   const qrRef = useRef<HTMLDivElement>(null);
+  const cardPrintRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const { selectedLocationId } = useLocation();
 
@@ -118,125 +121,164 @@ export function ManageCardDialog({
     }
   };
 
+  const handlePrintCard = () => {
+    window.print();
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Manage Card: {card.cardId}</DialogTitle>
-          <DialogDescription>
-            View balance, top-up, deduct funds, and see transaction history.
-          </DialogDescription>
-        </DialogHeader>
-        <ScrollArea className="max-h-[75vh] p-1 pr-6">
-          <div className="space-y-6 py-4 pr-1">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="p-4 border rounded-md">
-                <h3 className="text-lg font-semibold mb-2">Card Details</h3>
-                <p><strong>Card ID:</strong> {card.cardId}</p>
-                <p className="text-2xl font-bold text-primary my-2">
-                  Balance: {formatCurrency(card.currentBalance)}
-                </p>
-                {card.customerId && <p><strong>Linked Customer ID:</strong> {card.customerId}</p>}
-                <p className="text-xs text-muted-foreground">Created: {formatDate(card.createdAt)}</p>
-                <p className="text-xs text-muted-foreground">Last Updated: {formatDate(card.lastUpdatedAt)}</p>
-                 <div className="mt-4 space-y-2 text-center p-4 border rounded-md bg-muted/50">
-                  <Label>QR Code</Label>
-                  <div ref={qrRef} className="flex justify-center">
-                    <QRCodeStyling value={card.cardId} size={128} level="H" />
+    <>
+      <Dialog open={isOpen} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-2xl dialog-content-class">
+          <DialogHeader>
+            <DialogTitle>Manage Card: {card.cardId}</DialogTitle>
+            <DialogDescription>
+              View balance, top-up, deduct funds, and see transaction history.
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[75vh] p-1 pr-6">
+            <div className="space-y-6 py-4 pr-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="p-4 border rounded-md">
+                  <h3 className="text-lg font-semibold mb-2">Card Details</h3>
+                  <p><strong>Card ID:</strong> {card.cardId}</p>
+                   {customer && (
+                    <>
+                      <p><strong>Customer:</strong> {customer.name}</p>
+                      {customer.parentName && <p><strong>Parent:</strong> {customer.parentName}</p>}
+                    </>
+                  )}
+                  <p className="text-2xl font-bold text-primary my-2">
+                    Balance: {formatCurrency(card.currentBalance)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Created: {formatDate(card.createdAt)}</p>
+                  <p className="text-xs text-muted-foreground">Last Updated: {formatDate(card.lastUpdatedAt)}</p>
+                   <div className="mt-4 space-y-2 text-center p-4 border rounded-md bg-muted/50">
+                    <Label>QR Code</Label>
+                    <div ref={qrRef} className="flex justify-center">
+                      <QRCodeStyling value={card.cardId} size={128} level="H" />
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={handleDownloadQR} className="mt-2">
+                      <Download className="mr-2 h-4 w-4" />
+                      Download QR
+                    </Button>
                   </div>
-                  <Button type="button" variant="outline" size="sm" onClick={handleDownloadQR} className="mt-2">
-                    <Download className="mr-2 h-4 w-4" />
-                    Download QR
-                  </Button>
+                </div>
+
+                <div className="space-y-4">
+                  <form onSubmit={handleTopUpSubmit} className="p-4 border rounded-md">
+                    <h4 className="font-semibold mb-2 flex items-center"><ArrowUpCircle className="mr-2 h-5 w-5 text-green-500" />Top-Up Funds</h4>
+                    <div className="space-y-2">
+                      <div>
+                        <Label htmlFor="topUpAmount">Amount ($)</Label>
+                        <Input id="topUpAmount" type="number" value={topUpAmount} onChange={e => setTopUpAmount(e.target.value)} min="0.01" step="0.01" required />
+                      </div>
+                      <div>
+                        <Label htmlFor="topUpPaymentMethod">Payment Method</Label>
+                        <Select value={topUpPaymentMethod} onValueChange={(value: PaymentMethod) => setTopUpPaymentMethod(value)}>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select method"/>
+                            </SelectTrigger>
+                            <SelectContent>
+                                {PAYMENT_METHODS.filter(m => m !== 'Top-Up Card').map(method => (
+                                    <SelectItem key={method} value={method}>{method}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="topUpNotes">Notes (Optional)</Label>
+                        <Textarea id="topUpNotes" value={topUpNotes} onChange={e => setTopUpNotes(e.target.value)} placeholder="e.g., Cash deposit" />
+                      </div>
+                      <Button type="submit" className="w-full">Add Funds</Button>
+                    </div>
+                  </form>
+
+                  <form onSubmit={handleDeductSubmit} className="p-4 border rounded-md">
+                    <h4 className="font-semibold mb-2 flex items-center"><ArrowDownCircle className="mr-2 h-5 w-5 text-red-500" />Deduct Funds / Purchase</h4>
+                    <div className="space-y-2">
+                      <div>
+                        <Label htmlFor="deductAmount">Amount ($)</Label>
+                        <Input id="deductAmount" type="number" value={deductAmount} onChange={e => setDeductAmount(e.target.value)} min="0.01" step="0.01" required />
+                      </div>
+                      <div>
+                        <Label htmlFor="deductNotes">Notes (Optional)</Label>
+                        <Textarea id="deductNotes" value={deductNotes} onChange={e => setDeductNotes(e.target.value)} placeholder="e.g., Coffee and cake" />
+                      </div>
+                      <Button type="submit" variant="destructive" className="w-full">Deduct Funds</Button>
+                    </div>
+                  </form>
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <form onSubmit={handleTopUpSubmit} className="p-4 border rounded-md">
-                  <h4 className="font-semibold mb-2 flex items-center"><ArrowUpCircle className="mr-2 h-5 w-5 text-green-500" />Top-Up Funds</h4>
-                  <div className="space-y-2">
-                    <div>
-                      <Label htmlFor="topUpAmount">Amount ($)</Label>
-                      <Input id="topUpAmount" type="number" value={topUpAmount} onChange={e => setTopUpAmount(e.target.value)} min="0.01" step="0.01" required />
-                    </div>
-                    <div>
-                      <Label htmlFor="topUpPaymentMethod">Payment Method</Label>
-                      <Select value={topUpPaymentMethod} onValueChange={(value: PaymentMethod) => setTopUpPaymentMethod(value)}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select method"/>
-                          </SelectTrigger>
-                          <SelectContent>
-                              {PAYMENT_METHODS.filter(m => m !== 'Top-Up Card').map(method => (
-                                  <SelectItem key={method} value={method}>{method}</SelectItem>
-                              ))}
-                          </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="topUpNotes">Notes (Optional)</Label>
-                      <Textarea id="topUpNotes" value={topUpNotes} onChange={e => setTopUpNotes(e.target.value)} placeholder="e.g., Cash deposit" />
-                    </div>
-                    <Button type="submit" className="w-full">Add Funds</Button>
-                  </div>
-                </form>
-
-                <form onSubmit={handleDeductSubmit} className="p-4 border rounded-md">
-                  <h4 className="font-semibold mb-2 flex items-center"><ArrowDownCircle className="mr-2 h-5 w-5 text-red-500" />Deduct Funds / Purchase</h4>
-                  <div className="space-y-2">
-                    <div>
-                      <Label htmlFor="deductAmount">Amount ($)</Label>
-                      <Input id="deductAmount" type="number" value={deductAmount} onChange={e => setDeductAmount(e.target.value)} min="0.01" step="0.01" required />
-                    </div>
-                    <div>
-                      <Label htmlFor="deductNotes">Notes (Optional)</Label>
-                      <Textarea id="deductNotes" value={deductNotes} onChange={e => setDeductNotes(e.target.value)} placeholder="e.g., Coffee and cake" />
-                    </div>
-                    <Button type="submit" variant="destructive" className="w-full">Deduct Funds</Button>
-                  </div>
-                </form>
+              <div>
+                <h3 className="text-lg font-semibold mb-2 mt-4">Transaction History</h3>
+                <ScrollArea className="h-[300px] border rounded-md">
+                  <Table>
+                    {transactions.length === 0 && <TableCaption>No transactions yet for this card.</TableCaption>}
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Method</TableHead>
+                        <TableHead className="text-right">Amount</TableHead>
+                        <TableHead className="text-right">New Balance</TableHead>
+                        <TableHead>Notes</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {transactions.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map(tx => (
+                        <TableRow key={tx.id}>
+                          <TableCell>{formatDate(tx.timestamp)}</TableCell>
+                          <TableCell>{tx.type}</TableCell>
+                          <TableCell>{tx.paymentMethod || 'N/A'}</TableCell>
+                          <TableCell className={`text-right ${tx.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatCurrency(tx.amount)}
+                          </TableCell>
+                          <TableCell className="text-right">{formatCurrency(tx.balanceAfter)}</TableCell>
+                          <TableCell>{tx.notes || 'N/A'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
               </div>
             </div>
+          </ScrollArea>
+          <DialogFooter className="pt-4 mt-2 border-t">
+            <Button variant="outline" onClick={handlePrintCard}><Printer className="mr-2 h-4 w-4"/> Print Card</Button>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Close</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-            <div>
-              <h3 className="text-lg font-semibold mb-2 mt-4">Transaction History</h3>
-              <ScrollArea className="h-[300px] border rounded-md">
-                <Table>
-                  {transactions.length === 0 && <TableCaption>No transactions yet for this card.</TableCaption>}
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Method</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead className="text-right">New Balance</TableHead>
-                      <TableHead>Notes</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {transactions.sort((a,b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map(tx => (
-                      <TableRow key={tx.id}>
-                        <TableCell>{formatDate(tx.timestamp)}</TableCell>
-                        <TableCell>{tx.type}</TableCell>
-                        <TableCell>{tx.paymentMethod || 'N/A'}</TableCell>
-                        <TableCell className={`text-right ${tx.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {formatCurrency(tx.amount)}
-                        </TableCell>
-                        <TableCell className="text-right">{formatCurrency(tx.balanceAfter)}</TableCell>
-                        <TableCell>{tx.notes || 'N/A'}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
+      <div className="printable-receipt" ref={cardPrintRef}>
+        <div className="card-design">
+            <div className="card-header">
+                <User className="h-8 w-8"/>
+                <h3 className="card-title">Top-Up Card</h3>
             </div>
-          </div>
-        </ScrollArea>
-        <DialogFooter className="pt-4 mt-2 border-t">
-          <DialogClose asChild>
-            <Button type="button" variant="outline">Close</Button>
-          </DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            <div className="card-body">
+                <div className="card-details">
+                    <p><strong>Customer:</strong> {customer?.name || 'N/A'}</p>
+                    {customer?.parentName && <p><strong>Parent:</strong> {customer.parentName}</p>}
+                    <p className="card-id">ID: {card.cardId}</p>
+                </div>
+                <div className="card-qr">
+                  <QRCodeStyling value={card.cardId} size={80} level="H" />
+                </div>
+            </div>
+            <div className="card-footer">
+                <div className="balance-box">
+                    <p className="balance-label">Current Balance:</p>
+                    <div className="balance-value"></div>
+                </div>
+                <p className="footer-text">Scan QR to check balance</p>
+            </div>
+        </div>
+      </div>
+    </>
   );
 }
+

@@ -470,4 +470,32 @@ body {
     font-family: 'Courier New', Courier, monospace !important; /* Example: Monospaced font for receipts */
     font-size: 10pt !important; /* Adjust font size for readability */
   }
+
+   /* Styles for printable card design */
+   .card-design {
+    visibility: visible !important;
+    width: 3.375in; /* Standard credit card width */
+    height: 2.125in; /* Standard credit card height */
+    padding: 0.5rem;
+    border: 1px solid #333;
+    border-radius: 0.25rem;
+    background-color: #fff;
+    color: #000;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    font-family: Arial, sans-serif;
+    page-break-inside: avoid;
+  }
+  .card-header { display: flex; align-items: center; gap: 0.5rem; }
+  .card-title { font-size: 1rem; font-weight: bold; }
+  .card-body { display: flex; justify-content: space-between; align-items: center; }
+  .card-details { font-size: 0.75rem; }
+  .card-id { font-family: monospace; font-size: 0.65rem; margin-top: 0.25rem; }
+  .card-qr { width: 80px; height: 80px; }
+  .card-footer { font-size: 0.6rem; text-align: center; }
+  .balance-box { border: 1px solid #333; padding: 0.25rem; margin-bottom: 0.25rem; }
+  .balance-label { font-size: 0.5rem; text-transform: uppercase; }
+  .balance-value { height: 1rem; border-bottom: 1px dotted #333; }
+  .footer-text { margin-top: 0.25rem; }
 }
