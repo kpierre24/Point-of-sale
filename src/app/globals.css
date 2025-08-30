@@ -489,7 +489,7 @@ body {
     width: 85.6mm;
     height: 53.98mm;
     padding: 4mm;
-    border: none;
+    border: 1px solid #000;
     background-color: #fff !important;
     color: #000 !important;
     display: flex !important;
@@ -503,13 +503,13 @@ body {
 
   .card-header-print { display: flex; align-items: center; gap: 0.5rem; }
   .card-title-print { font-size: 10pt; font-weight: bold; }
-  .card-body-print { display: flex; justify-content: space-between; align-items: center; }
-  .card-details-print { font-size: 8pt; }
-  .card-id-print { font-family: monospace; font-size: 7pt; margin-top: 0.25rem; }
-  .card-qr-print { width: 22mm; height: 22mm; }
+  .card-body-print { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+  .card-details-print { font-size: 7pt; flex: 1; }
+  .card-details-print p { margin-bottom: 0.5rem; }
+  .card-id-print { font-family: monospace; font-size: 6pt; margin-top: 0.25rem; }
+  .card-qr-print { width: 22mm; height: 22mm; flex-shrink: 0; }
   .card-footer-print { font-size: 6pt; text-align: center; }
-  .balance-box-print { border: 1px solid #333; padding: 0.25rem; margin-bottom: 0.25rem; }
-  .balance-label-print { font-size: 6pt; text-transform: uppercase; }
+  .balance-box-print { border: 1px solid #333; padding: 0.25rem; margin-top: 0.5rem; }
+  .balance-label-print { font-size: 6pt; text-transform: uppercase; display: block; margin-bottom: 0.25rem; }
   .balance-value-print { height: 1rem; border-bottom: 1px dotted #333; }
-  .footer-text-print { margin-top: 0.25rem; }
 }
