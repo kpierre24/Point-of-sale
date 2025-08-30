@@ -1,3 +1,4 @@
+
 // src/components/CustomerForm.tsx
 "use client";
 
@@ -18,6 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
+import { Separator } from './ui/separator';
 
 interface CustomerFormProps {
   isOpen: boolean;
@@ -31,6 +33,8 @@ const defaultCustomer: Omit<Customer, 'id'> = {
   email: '',
   phone: '',
   address: '',
+  parentName: '',
+  parentEmail: '',
 };
 
 export function CustomerForm({ isOpen, onOpenChange, onSave, customerToEdit }: CustomerFormProps) {
@@ -60,7 +64,7 @@ export function CustomerForm({ isOpen, onOpenChange, onSave, customerToEdit }: C
       });
       return;
     }
-    // Basic email validation (optional, can be more robust)
+    // Basic email validation
     if (customer.email && !/\S+@\S+\.\S+/.test(customer.email)) {
       toast({
         title: 'Invalid Email',
@@ -69,6 +73,13 @@ export function CustomerForm({ isOpen, onOpenChange, onSave, customerToEdit }: C
       });
       return;
     }
+    if (customer.parentEmail && !/\S+@\S+\.\S+/.test(customer.parentEmail)) {
+        toast({
+          title: 'Invalid Parent Email',
+          description: 'Please enter a valid email address for the parent.',
+        });
+        return;
+      }
 
     const finalCustomer: Customer = {
       ...customer,
@@ -90,6 +101,7 @@ export function CustomerForm({ isOpen, onOpenChange, onSave, customerToEdit }: C
         <form onSubmit={handleSubmit}>
           <ScrollArea className="max-h-[70vh] p-1 pr-6">
             <div className="space-y-4 py-4 pr-1">
+              <h3 className="text-md font-medium text-muted-foreground">Customer Details</h3>
               <div>
                 <Label htmlFor="name">Full Name*</Label>
                 <Input id="name" name="name" value={customer.name} onChange={handleChange} required />
@@ -112,6 +124,18 @@ export function CustomerForm({ isOpen, onOpenChange, onSave, customerToEdit }: C
                   placeholder="Street, City, State, Postal Code"
                   rows={3}
                 />
+              </div>
+
+              <Separator className="my-4" />
+              <h3 className="text-md font-medium text-muted-foreground">Parent/Guardian Details (Optional)</h3>
+              
+              <div>
+                <Label htmlFor="parentName">Parent's Full Name</Label>
+                <Input id="parentName" name="parentName" value={customer.parentName || ''} onChange={handleChange} />
+              </div>
+              <div>
+                <Label htmlFor="parentEmail">Parent's Email Address</Label>
+                <Input id="parentEmail" name="parentEmail" type="email" value={customer.parentEmail || ''} onChange={handleChange} placeholder="e.g., parent@example.com" />
               </div>
             </div>
           </ScrollArea>

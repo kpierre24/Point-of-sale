@@ -2,7 +2,7 @@
 // src/app/topup-cards/page.tsx
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { TopUpCard, CardTransaction, Customer, PaymentMethod } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -13,13 +13,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableCap
 import { CreateTopUpCardDialog } from '@/components/topup-cards/CreateTopUpCardDialog';
 import { ManageCardDialog } from '@/components/topup-cards/ManageCardDialog';
 import QRCodeScannerComponent from '@/components/topup-cards/QRCodeScannerComponent';
-import { PlusCircle, CreditCard, Search, Edit, Loader2, Users } from 'lucide-react';
+import { PlusCircle, CreditCard, Search, Edit, Loader2, Users, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, setDoc, addDoc, writeBatch, query as firestoreQuery, orderBy, where, limit, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, addDoc, writeBatch, query as firestoreQuery, orderBy, where, limit, serverTimestamp, getDocs as getDocsInBatch, deleteDoc } from 'firebase/firestore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
+import { useBulkSelection } from '@/hooks/use-bulk-selection';
+import { BulkActionsToolbar, commonBulkActions } from '@/components/ui/bulk-actions-toolbar';
+import { Checkbox } from '@/components/ui/checkbox';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 
 const TOPUP_CARDS_COLLECTION = 'topUpCards';
@@ -161,6 +165,40 @@ export default function TopUpCardsPage() {
     }
   });
 
+  const bulkDeleteMutation = useMutation<void, Error, string[]>({
+    mutationFn: async (cardIds: string[]) => {
+        if (!db) throw new Error("Firestore not available");
+        
+        const batch = writeBatch(db);
+        
+        for (const cardId of cardIds) {
+            const cardToDelete = cards.find(c => c.id === cardId);
+            if (!cardToDelete) continue;
+
+            // Delete the card document
+            const cardRef = doc(db, TOPUP_CARDS_COLLECTION, cardId);
+            batch.delete(cardRef);
+            
+            // Find and delete all associated transactions
+            const transactionsQuery = firestoreQuery(collection(db, CARD_TRANSACTIONS_COLLECTION), where("cardId", "==", cardToDelete.cardId));
+            const transactionsSnapshot = await getDocsInBatch(transactionsQuery);
+            transactionsSnapshot.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+        }
+        await batch.commit();
+    },
+    onSuccess: (_, variables) => {
+        queryClient.invalidateQueries({ queryKey: [TOPUP_CARDS_COLLECTION] });
+        queryClient.invalidateQueries({ queryKey: [CARD_TRANSACTIONS_COLLECTION] });
+        toast({ title: 'Bulk Delete Successful', description: `${variables.length} cards and their transactions have been deleted.` });
+        clearSelection();
+    },
+    onError: (error) => {
+        toast({ title: 'Bulk Delete Failed', description: error.message, variant: 'destructive' });
+    }
+});
+
 
   const generateNewCardId = (): string => {
     let newId = '';
@@ -276,7 +314,29 @@ export default function TopUpCardsPage() {
     findCardByManualId(cardIdToSearch);
   };
 
-  const isLoadingAnything = isLoadingCards || isLoadingCustomers || cardMutation.isPending || cardTransactionMutation.isPending;
+  const {
+    selectedItems,
+    selectedCount,
+    totalCount,
+    isSelected,
+    toggleItem,
+    clearSelection,
+    toggleAll,
+    isAllSelected,
+    isPartiallySelected,
+    selectedIds,
+  } = useBulkSelection<TopUpCard>({
+    items: cards,
+    getItemId: (item) => item.id,
+  });
+
+  const bulkActions = useMemo(() => [
+    commonBulkActions.delete(() => {
+        bulkDeleteMutation.mutate(Array.from(selectedIds));
+    }),
+  ], [selectedIds, bulkDeleteMutation]);
+
+  const isLoadingAnything = isLoadingCards || isLoadingCustomers || cardMutation.isPending || cardTransactionMutation.isPending || bulkDeleteMutation.isPending;
 
   if (!db) {
     return (
@@ -373,6 +433,13 @@ export default function TopUpCardsPage() {
           </div>
         </CardContent>
       </Card>
+      
+      <BulkActionsToolbar
+        selectedCount={selectedCount}
+        totalCount={totalCount}
+        onClearSelection={clearSelection}
+        actions={bulkActions}
+      />
 
       <Card>
         <CardHeader>
@@ -387,6 +454,14 @@ export default function TopUpCardsPage() {
               {cards.length === 0 && <TableCaption>No cards found.</TableCaption>}
               <TableHeader className="sticky top-0 bg-card z-10">
                 <TableRow>
+                  <TableHead className="w-[50px]">
+                    <Checkbox
+                      checked={isAllSelected}
+                      onCheckedChange={toggleAll}
+                      aria-label="Select all cards"
+                      disabled={bulkDeleteMutation.isPending}
+                    />
+                  </TableHead>
                   <TableHead>Card ID</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead className="text-right">Current Balance</TableHead>
@@ -399,9 +474,24 @@ export default function TopUpCardsPage() {
                 {cards.map((card) => {
                   const customer = customers.find(c => c.id === card.customerId);
                   return (
-                    <TableRow key={card.id}>
+                    <TableRow key={card.id} data-state={isSelected(card) ? "selected" : ""}>
+                      <TableCell>
+                        <Checkbox
+                          checked={isSelected(card)}
+                          onCheckedChange={() => toggleItem(card)}
+                          aria-label={`Select card ${card.cardId}`}
+                          disabled={bulkDeleteMutation.isPending}
+                        />
+                      </TableCell>
                       <TableCell className="font-mono">{card.cardId}</TableCell>
-                      <TableCell>{customer ? customer.name : 'N/A'}</TableCell>
+                      <TableCell>
+                        {customer ? (
+                          <div className='text-sm'>
+                            <p className='font-medium'>{customer.name}</p>
+                            {customer.parentName && <p className='text-xs text-muted-foreground'>Parent: {customer.parentName}</p>}
+                          </div>
+                        ) : 'N/A'}
+                      </TableCell>
                       <TableCell className="text-right font-semibold">{formatCurrency(card.currentBalance)}</TableCell>
                       <TableCell>{formatDate(card.createdAt)}</TableCell>
                       <TableCell>{formatDate(card.lastUpdatedAt)}</TableCell>
@@ -430,3 +520,4 @@ export default function TopUpCardsPage() {
     </div>
   );
 }
+
