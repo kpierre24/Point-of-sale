@@ -1,4 +1,3 @@
-
 // src/components/CustomerForm.tsx
 "use client";
 
@@ -24,7 +23,7 @@ import { Separator } from './ui/separator';
 interface CustomerFormProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSave: (customer: Customer) => void;
+  onSave: (customer: Customer, cardIdToAssign?: string) => void; // Modified to pass cardId
   customerToEdit?: Customer | null;
 }
 
@@ -41,6 +40,7 @@ const defaultCustomer: Omit<Customer, 'id'> = {
 
 export function CustomerForm({ isOpen, onOpenChange, onSave, customerToEdit }: CustomerFormProps) {
   const [customer, setCustomer] = useState<Omit<Customer, 'id'>>(defaultCustomer);
+  const [cardIdToAssign, setCardIdToAssign] = useState('');
   const { toast } = useToast();
 
   useEffect(() => {
@@ -49,6 +49,8 @@ export function CustomerForm({ isOpen, onOpenChange, onSave, customerToEdit }: C
     } else {
       setCustomer(defaultCustomer);
     }
+    // Reset card assignment field whenever dialog opens
+    setCardIdToAssign('');
   }, [customerToEdit, isOpen]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -87,7 +89,7 @@ export function CustomerForm({ isOpen, onOpenChange, onSave, customerToEdit }: C
       ...customer,
       id: customerToEdit?.id || crypto.randomUUID(),
     };
-    onSave(finalCustomer);
+    onSave(finalCustomer, cardIdToAssign.trim() ? cardIdToAssign.trim().toUpperCase() : undefined);
     onOpenChange(false);
   };
 
@@ -103,6 +105,25 @@ export function CustomerForm({ isOpen, onOpenChange, onSave, customerToEdit }: C
         <form onSubmit={handleSubmit}>
           <ScrollArea className="max-h-[70vh] p-1 pr-6">
             <div className="space-y-4 py-4 pr-1">
+              
+              <Separator className="my-4" />
+              <h3 className="text-md font-medium text-muted-foreground">Assign Top-Up Card (Optional)</h3>
+              <div>
+                <Label htmlFor="cardIdToAssign">Assign Card ID</Label>
+                <Input 
+                  id="cardIdToAssign" 
+                  name="cardIdToAssign" 
+                  value={cardIdToAssign} 
+                  onChange={(e) => setCardIdToAssign(e.target.value)} 
+                  placeholder="e.g. CARD-123XYZ"
+                  className="uppercase"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Enter an existing, unassigned Card ID. If left blank, a new card will be created for a new customer.
+                </p>
+              </div>
+
+              <Separator className="my-4" />
               <h3 className="text-md font-medium text-muted-foreground">Customer Details</h3>
               <div>
                 <Label htmlFor="name">Full Name*</Label>

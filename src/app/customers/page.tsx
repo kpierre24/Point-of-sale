@@ -1,4 +1,3 @@
-
 // src/app/customers/page.tsx
 "use client";
 
@@ -32,7 +31,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, setDoc, deleteDoc, addDoc, query as firestoreQuery, orderBy } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, deleteDoc, addDoc, query as firestoreQuery, orderBy, writeBatch, where } from 'firebase/firestore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const CUSTOMERS_COLLECTION = 'customers';
@@ -107,10 +106,12 @@ export default function CustomersPage() {
     return newId.toUpperCase();
   };
 
-  const customerMutation = useMutation<void, Error, { customer: Customer; isNew: boolean }>({
-    mutationFn: async ({ customer, isNew }) => {
+  const customerMutation = useMutation<void, Error, { customer: Customer; isNew: boolean; cardIdToAssign?: string }>({
+    mutationFn: async ({ customer, isNew, cardIdToAssign }) => {
       if (!db) throw new Error("Firestore not available");
       
+      const batch = writeBatch(db);
+
       const customerToSave = { ...customer };
       Object.keys(customerToSave).forEach(keyStr => {
         const key = keyStr as keyof typeof customerToSave;
@@ -120,12 +121,25 @@ export default function CustomersPage() {
       });
 
       const customerRef = doc(db, CUSTOMERS_COLLECTION, customerToSave.id);
-      await setDoc(customerRef, customerToSave, { merge: !isNew });
+      batch.set(customerRef, customerToSave, { merge: !isNew });
 
-      if (isNew) {
+      if (cardIdToAssign) {
+        // Find the card by cardId and update its customerId
+        const cardQuery = firestoreQuery(collection(db, TOPUP_CARDS_COLLECTION), where("cardId", "==", cardIdToAssign));
+        const cardSnapshot = await getDocs(cardQuery);
+        if (cardSnapshot.empty) {
+          throw new Error(`Card with ID "${cardIdToAssign}" not found.`);
+        }
+        const cardDoc = cardSnapshot.docs[0];
+        if (cardDoc.data().customerId) {
+            throw new Error(`Card "${cardIdToAssign}" is already assigned to another customer.`);
+        }
+        batch.update(cardDoc.ref, { customerId: customer.id, lastUpdatedAt: new Date().toISOString() });
+      } else if (isNew) {
+        // Create a new card only if it's a new customer and no card is being assigned
         const newCardId = generateNewCardId();
         const now = new Date().toISOString();
-        const newTopUpCard: Omit<TopUpCard, 'id'> = { // Firestore will generate ID for new card
+        const newTopUpCard: Omit<TopUpCard, 'id'> = {
           cardId: newCardId,
           customerId: customer.id,
           currentBalance: 0,
@@ -133,8 +147,9 @@ export default function CustomersPage() {
           createdAt: now,
           lastUpdatedAt: now,
         };
-        // Add new top-up card with an auto-generated ID
-        await addDoc(collection(db, TOPUP_CARDS_COLLECTION), newTopUpCard);
+        const newCardRef = doc(collection(db, TOPUP_CARDS_COLLECTION));
+        batch.set(newCardRef, newTopUpCard);
+        
         setTimeout(() => {
           toast({
             title: 'Top-Up Card Created',
@@ -145,14 +160,14 @@ export default function CustomersPage() {
               </div>
             ),
           });
-        }, 100); // Slight delay for separate toast
+        }, 100);
       }
+
+      await batch.commit();
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [CUSTOMERS_COLLECTION] });
-      if (variables.isNew) {
-          queryClient.invalidateQueries({ queryKey: [TOPUP_CARDS_COLLECTION] });
-      }
+      queryClient.invalidateQueries({ queryKey: [TOPUP_CARDS_COLLECTION] });
       setTimeout(() => {
         toast({ title: variables.isNew ? 'Customer Added' : 'Customer Updated', description: `${variables.customer.name} has been saved.` });
       }, 0);
@@ -183,9 +198,9 @@ export default function CustomersPage() {
   });
 
 
-  const handleSaveCustomer = (customerData: Customer) => {
+  const handleSaveCustomer = (customerData: Customer, cardIdToAssign?: string) => {
     const isNew = !customers.some(c => c.id === customerData.id);
-    customerMutation.mutate({ customer: customerData, isNew });
+    customerMutation.mutate({ customer: customerData, isNew, cardIdToAssign });
   };
 
   const handleAddNewCustomer = () => {
