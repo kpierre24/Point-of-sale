@@ -252,7 +252,6 @@ body {
     @apply bg-card text-card-foreground;
     @apply border border-border rounded-lg;
     @apply shadow-card;
-    @apply p-card-padding;
   }
 
   .card:hover {
