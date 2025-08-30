@@ -107,10 +107,12 @@ export interface MetricCardProps extends React.HTMLAttributes<HTMLDivElement> {
   title: string
   value: string | number
   icon?: LucideIcon
-  trend?: string
-  trendDirection?: "up" | "down" | "neutral"
+  trend?: {
+    value: string
+    isPositive: boolean
+  }
   description?: string
-  variant?: "default" | "elevated"
+  variant?: "default" | "elevated" | 'interactive'
 }
 
 const MetricCard = React.forwardRef<HTMLDivElement, MetricCardProps>(
@@ -120,28 +122,18 @@ const MetricCard = React.forwardRef<HTMLDivElement, MetricCardProps>(
     value, 
     icon: Icon, 
     trend, 
-    trendDirection = "neutral", 
     description, 
     variant = "default",
     ...props 
   }, ref) => {
-    const getTrendColor = () => {
-      switch (trendDirection) {
-        case "up":
-          return "text-success"
-        case "down":
-          return "text-destructive"
-        default:
-          return "text-muted-foreground"
-      }
-    }
+    const trendColor = trend?.isPositive ? 'text-success' : 'text-destructive';
 
     return (
-      <Card ref={ref} variant={variant} className={cn("", className)} {...props}>
+      <Card ref={ref} variant={variant} className={cn("group", className)} {...props}>
         <CardContent className="p-card-padding">
-          <div className="flex items-center justify-between">
-            <div className="flex-1">
-              <p className="text-sm font-medium text-muted-foreground mb-1">
+          <div className="flex items-start justify-between">
+            <div className="flex-1 space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">
                 {title}
               </p>
               <div className="flex items-baseline gap-2">
@@ -149,20 +141,20 @@ const MetricCard = React.forwardRef<HTMLDivElement, MetricCardProps>(
                   {value}
                 </p>
                 {trend && (
-                  <span className={cn("text-sm font-medium", getTrendColor())}>
-                    {trend}
+                  <span className={cn("text-sm font-medium", trendColor)}>
+                    {trend.value}
                   </span>
                 )}
               </div>
               {description && (
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground">
                   {description}
                 </p>
               )}
             </div>
             {Icon && (
               <div className="flex-shrink-0 ml-4">
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
                   <Icon className="w-6 h-6 text-primary" />
                 </div>
               </div>
