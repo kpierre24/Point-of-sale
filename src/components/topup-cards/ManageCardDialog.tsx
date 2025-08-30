@@ -1,4 +1,3 @@
-
 // src/components/topup-cards/ManageCardDialog.tsx
 "use client";
 
@@ -26,6 +25,8 @@ import { format } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PAYMENT_METHODS } from '@/config/constants';
 import { useLocation } from '@/context/LocationContext';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 
 interface ManageCardDialogProps {
@@ -121,8 +122,31 @@ export function ManageCardDialog({
     }
   };
 
-  const handlePrintCard = () => {
-    window.print();
+  const handlePrintCard = async () => {
+    const cardElement = cardPrintRef.current;
+    if (!cardElement) {
+        toast({ title: 'Error', description: 'Cannot find card element to print.', variant: 'destructive' });
+        return;
+    }
+    try {
+        const canvas = await html2canvas(cardElement, { scale: 3, backgroundColor: null });
+        const imgData = canvas.toDataURL('image/png');
+
+        // Dimensions of a credit card in mm (85.6mm x 53.98mm)
+        const pdf = new jsPDF({
+            orientation: 'landscape',
+            unit: 'mm',
+            format: [85.6, 53.98]
+        });
+
+        pdf.addImage(imgData, 'PNG', 0, 0, 85.6, 53.98);
+        pdf.save(`topup-card-${card.cardId}.pdf`);
+
+        toast({ title: 'PDF Generated', description: 'Your card PDF has been downloaded.' });
+    } catch (error) {
+        console.error("Error generating PDF:", error);
+        toast({ title: 'PDF Generation Error', description: 'Could not generate PDF for the card.', variant: 'destructive' });
+    }
   };
 
   return (
@@ -252,33 +276,32 @@ export function ManageCardDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <div className="printable-receipt" ref={cardPrintRef}>
-        <div className="card-design">
-            <div className="card-header">
-                <User className="h-8 w-8"/>
-                <h3 className="card-title">Top-Up Card</h3>
-            </div>
-            <div className="card-body">
-                <div className="card-details">
-                    <p><strong>Customer:</strong> {customer?.name || 'N/A'}</p>
-                    {customer?.parentName && <p><strong>Parent:</strong> {customer.parentName}</p>}
-                    <p className="card-id">ID: {card.cardId}</p>
-                </div>
-                <div className="card-qr">
-                  <QRCodeStyling value={card.cardId} size={80} level="H" />
-                </div>
-            </div>
-            <div className="card-footer">
-                <div className="balance-box">
-                    <p className="balance-label">Current Balance:</p>
-                    <div className="balance-value"></div>
-                </div>
-                <p className="footer-text">Scan QR to check balance</p>
-            </div>
-        </div>
+      
+      <div className="print-only" style={{ position: 'fixed', left: '-9999px', top: '-9999px' }}>
+          <div ref={cardPrintRef} className="card-design-print">
+              <div className="card-header-print">
+                  <User className="h-8 w-8"/>
+                  <h3 className="card-title-print">Top-Up Card</h3>
+              </div>
+              <div className="card-body-print">
+                  <div className="card-details-print">
+                      <p><strong>Customer:</strong> {customer?.name || 'N/A'}</p>
+                      {customer?.parentName && <p><strong>Parent:</strong> {customer.parentName}</p>}
+                      <p className="card-id-print">ID: {card.cardId}</p>
+                  </div>
+                  <div className="card-qr-print">
+                    <QRCodeStyling value={card.cardId} size={80} level="H" />
+                  </div>
+              </div>
+              <div className="card-footer-print">
+                  <div className="balance-box-print">
+                      <p className="balance-label-print">Current Balance:</p>
+                      <div className="balance-value-print"></div>
+                  </div>
+                  <p className="footer-text-print">Scan QR to check balance</p>
+              </div>
+          </div>
       </div>
     </>
   );
 }
-

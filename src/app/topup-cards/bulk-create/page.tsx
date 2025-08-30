@@ -1,7 +1,7 @@
 // src/app/topup-cards/bulk-create/page.tsx
 "use client";
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import type { TopUpCard, CardTransaction } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -14,6 +14,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Loader2, Printer, Users } from 'lucide-react';
 import Link from 'next/link';
 import QRCode from 'qrcode.react';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const TOPUP_CARDS_COLLECTION = 'topUpCards';
 const CARD_TRANSACTIONS_COLLECTION = 'cardTransactions';
@@ -28,6 +30,7 @@ export default function BulkCreateTopUpCardsPage() {
   const [generatedCards, setGeneratedCards] = useState<GeneratedCard[]>([]);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const printableAreaRef = useRef<HTMLDivElement>(null);
 
   const bulkCreateMutation = useMutation<GeneratedCard[], Error, { count: number; balance: number }>({
     mutationFn: async ({ count, balance }) => {
@@ -115,8 +118,33 @@ export default function BulkCreateTopUpCardsPage() {
     bulkCreateMutation.mutate({ count, balance });
   };
   
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = async () => {
+    const printableElement = printableAreaRef.current;
+    if (!printableElement) {
+        toast({ title: "Error", description: "Printable area not found.", variant: "destructive" });
+        return;
+    }
+
+    try {
+        const canvas = await html2canvas(printableElement, { scale: 3 });
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const imgWidth = canvas.width;
+        const imgHeight = canvas.height;
+        const ratio = imgWidth / imgHeight;
+        const newImgWidth = pdfWidth;
+        const newImgHeight = newImgWidth / ratio;
+
+        pdf.addImage(imgData, 'PNG', 0, 0, newImgWidth, newImgHeight);
+        pdf.save(`bulk-cards-${Date.now()}.pdf`);
+        toast({ title: "PDF Generated", description: "Your PDF with all cards has been downloaded." });
+
+    } catch (error) {
+        console.error("Error generating PDF:", error);
+        toast({ title: "PDF Generation Failed", description: "Could not generate PDF.", variant: "destructive" });
+    }
   };
 
 
@@ -186,15 +214,15 @@ export default function BulkCreateTopUpCardsPage() {
                 <h2 className="text-2xl font-bold">Generated Cards</h2>
                 <Button onClick={handlePrint} variant="outline">
                     <Printer className="mr-2 h-4 w-4" />
-                    Print Cards
+                    Print All as PDF
                 </Button>
             </div>
-            <div className="printable-area grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div ref={printableAreaRef} className="printable-area grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 p-4 bg-white">
                 {generatedCards.map((card) => (
-                    <Card key={card.cardId} className="p-4 flex flex-col items-center justify-center text-center break-all border-2 border-dashed">
+                    <div key={card.cardId} className="p-4 flex flex-col items-center justify-center text-center break-all border-2 border-dashed aspect-video">
                        <QRCode value={card.qrCodeValue} size={128} level="H" renderAs="svg" />
                        <p className="mt-2 font-mono text-sm tracking-tighter">{card.cardId}</p>
-                    </Card>
+                    </div>
                 ))}
             </div>
         </>

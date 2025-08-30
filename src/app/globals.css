@@ -472,30 +472,44 @@ body {
   }
 
    /* Styles for printable card design */
-   .card-design {
-    visibility: visible !important;
-    width: 3.375in; /* Standard credit card width */
-    height: 2.125in; /* Standard credit card height */
-    padding: 0.5rem;
-    border: 1px solid #333;
-    border-radius: 0.25rem;
-    background-color: #fff;
-    color: #000;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    font-family: Arial, sans-serif;
-    page-break-inside: avoid;
+  .print-only {
+    display: none;
   }
-  .card-header { display: flex; align-items: center; gap: 0.5rem; }
-  .card-title { font-size: 1rem; font-weight: bold; }
-  .card-body { display: flex; justify-content: space-between; align-items: center; }
-  .card-details { font-size: 0.75rem; }
-  .card-id { font-family: monospace; font-size: 0.65rem; margin-top: 0.25rem; }
-  .card-qr { width: 80px; height: 80px; }
-  .card-footer { font-size: 0.6rem; text-align: center; }
-  .balance-box { border: 1px solid #333; padding: 0.25rem; margin-bottom: 0.25rem; }
-  .balance-label { font-size: 0.5rem; text-transform: uppercase; }
-  .balance-value { height: 1rem; border-bottom: 1px dotted #333; }
-  .footer-text { margin-top: 0.25rem; }
+   
+  @page {
+    size: 85.6mm 53.98mm; /* Credit card size */
+    margin: 0;
+  }
+  
+  .card-design-print {
+    visibility: visible !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 85.6mm;
+    height: 53.98mm;
+    padding: 4mm;
+    border: none;
+    background-color: #fff !important;
+    color: #000 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    font-family: Arial, sans-serif !important;
+    box-sizing: border-box;
+    -webkit-print-color-adjust: exact;
+    color-adjust: exact;
+  }
+
+  .card-header-print { display: flex; align-items: center; gap: 0.5rem; }
+  .card-title-print { font-size: 10pt; font-weight: bold; }
+  .card-body-print { display: flex; justify-content: space-between; align-items: center; }
+  .card-details-print { font-size: 8pt; }
+  .card-id-print { font-family: monospace; font-size: 7pt; margin-top: 0.25rem; }
+  .card-qr-print { width: 22mm; height: 22mm; }
+  .card-footer-print { font-size: 6pt; text-align: center; }
+  .balance-box-print { border: 1px solid #333; padding: 0.25rem; margin-bottom: 0.25rem; }
+  .balance-label-print { font-size: 6pt; text-transform: uppercase; }
+  .balance-value-print { height: 1rem; border-bottom: 1px dotted #333; }
+  .footer-text-print { margin-top: 0.25rem; }
 }
