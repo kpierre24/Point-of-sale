@@ -279,23 +279,17 @@ export function ManageCardDialog({
       {/* This element is only for rendering the printable card off-screen */}
       <div className="fixed" style={{ left: '-9999px', top: '-9999px' }}>
           <div ref={cardPrintRef} className="card-design-print">
-              <div className="card-header-print">
-                  <User className="h-6 w-6"/>
-                  <h3 className="card-title-print">Top-Up Card</h3>
-              </div>
               <div className="card-body-print">
-                  <div className="card-details-print">
-                      <p><strong>Customer:</strong> {customer?.name || 'N/A'}</p>
-                      {customer?.parentName && <p><strong>Parent:</strong> {customer.parentName}</p>}
-                      <p className="card-id-print">ID: {card.cardId}</p>
-                        <div className="balance-box-print">
-                            <p className="balance-label-print">Current Balance:</p>
-                            <div className="balance-value-print"></div>
-                        </div>
-                  </div>
-                  <div className="card-qr-print">
-                    <QRCodeStyling value={card.cardId} size={80} level="H" />
-                  </div>
+                <div className="card-details-print">
+                  <h3 className="card-title-print">Top-Up Card</h3>
+                  <p>Customer: {customer?.name || 'N/A'}</p>
+                  {customer?.parentName && <p>Parent: {customer.parentName}</p>}
+                  <p>ID: {card.cardId}</p>
+                  <p>Current Balance: {formatCurrency(card.currentBalance)}</p>
+                </div>
+                <div className="card-qr-print">
+                  <QRCodeStyling value={card.cardId} size={80} level="H" />
+                </div>
               </div>
               <p className="card-footer-print">Scan QR to check balance or top-up</p>
           </div>
