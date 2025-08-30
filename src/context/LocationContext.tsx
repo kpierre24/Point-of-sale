@@ -1,7 +1,7 @@
 // src/context/LocationContext.tsx
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import type { Location } from '@/types';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
@@ -30,6 +30,17 @@ export function LocationProvider({ children }: { children: ReactNode }) {
     setIsInitialized(true);
   }, []);
 
+  const handleSetSelectedLocationId = useCallback((id: string | null) => {
+    if (isInitialized) {
+        if (id) {
+            sessionStorage.setItem('selectedLocationId', id);
+        } else {
+            sessionStorage.removeItem('selectedLocationId');
+        }
+        setSelectedLocationId(id);
+    }
+  }, [isInitialized]);
+
   useEffect(() => {
     if (!db) return;
 
@@ -37,31 +48,22 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         const fetchedLocations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Location));
         setLocations(fetchedLocations);
 
-        // If no location is selected yet, select the first one
-        if (!sessionStorage.getItem('selectedLocationId') && fetchedLocations.length > 0) {
-            setSelectedLocationId(fetchedLocations[0].id);
+        // If no location is selected yet, or if the selected one no longer exists, select the first one.
+        const currentSelectedId = sessionStorage.getItem('selectedLocationId');
+        const isValidSelection = fetchedLocations.some(l => l.id === currentSelectedId);
+
+        if ((!currentSelectedId || !isValidSelection) && fetchedLocations.length > 0) {
+            handleSetSelectedLocationId(fetchedLocations[0].id);
         }
     });
 
     return () => unsub();
-  }, []);
-
-  useEffect(() => {
-    // This effect saves the location ID to sessionStorage whenever it changes,
-    // but only after the initial state has been loaded from storage.
-    if (isInitialized) {
-        if (selectedLocationId) {
-          sessionStorage.setItem('selectedLocationId', selectedLocationId);
-        } else {
-          sessionStorage.removeItem('selectedLocationId');
-        }
-    }
-  }, [selectedLocationId, isInitialized]);
+  }, [handleSetSelectedLocationId]); // Use the stable callback here
   
   const activeSessionId = locations.find(loc => loc.id === selectedLocationId)?.activeSessionId || null;
 
   return (
-    <LocationContext.Provider value={{ selectedLocationId, setSelectedLocationId, activeSessionId }}>
+    <LocationContext.Provider value={{ selectedLocationId, setSelectedLocationId: handleSetSelectedLocationId, activeSessionId }}>
       {children}
     </LocationContext.Provider>
   );
