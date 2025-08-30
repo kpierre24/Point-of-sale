@@ -1,6 +1,6 @@
 // src/components/PurchaseOrderTable.tsx
 "use client";
-
+import React from 'react';
 import type { PurchaseOrder, Location } from '@/types';
 import {
   Table,
@@ -36,7 +36,7 @@ interface PurchaseOrderTableProps {
   locations: Location[];
 }
 
-export function PurchaseOrderTable({ purchaseOrders, onEdit, onDelete, isLoading = false, locations }: PurchaseOrderTableProps) {
+function PurchaseOrderTableComponent({ purchaseOrders, onEdit, onDelete, isLoading = false, locations }: PurchaseOrderTableProps) {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
   };
@@ -141,3 +141,5 @@ export function PurchaseOrderTable({ purchaseOrders, onEdit, onDelete, isLoading
     </ScrollArea>
   );
 }
+
+export const PurchaseOrderTable = React.memo(PurchaseOrderTableComponent);

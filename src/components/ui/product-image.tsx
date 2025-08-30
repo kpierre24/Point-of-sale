@@ -18,7 +18,7 @@ interface ProductImageProps {
 
 const sizeMap = {
   sm: { width: 40, height: 40, className: "w-10 h-10" },
-  md: { width: 60, height: 60, className: "w-15 h-15" },
+  md: { width: 60, height: 60, className: "w-16 h-16" },
   lg: { width: 80, height: 80, className: "w-20 h-20" },
   xl: { width: 120, height: 120, className: "w-30 h-30" },
 };

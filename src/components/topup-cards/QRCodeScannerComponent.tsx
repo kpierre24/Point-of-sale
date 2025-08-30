@@ -1,28 +1,34 @@
-
 // src/components/topup-cards/QRCodeScannerComponent.tsx
 "use client";
-
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { Html5Qrcode, Html5QrcodeScannerState, Html5QrcodeError, Html5QrcodeResult } from 'html5-qrcode';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Camera, CameraOff, ScanLine } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
+interface Html5QrcodeResult {
+    decodedText: string;
+    result: {
+        format: {
+            formatName: string;
+        };
+        text: string;
+    };
+}
 interface QRCodeScannerComponentProps {
-  onScanSuccess: (decodedText: string, decodedResult: Html5QrcodeResult) => void;
-  onScanFailure?: (error: Html5QrcodeError) => void;
+  onScanSuccess: (decodedText: string) => void;
+  onScanFailure?: (error: any) => void;
   active: boolean;
   setActive: (active: boolean) => void;
 }
 
 const QRCodeScannerComponent = ({ onScanSuccess, onScanFailure, active, setActive }: QRCodeScannerComponentProps) => {
   const scannerRegionId = "qr-scanner-region";
-  const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  const html5QrCodeRef = useRef<any>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const { toast } = useToast();
   
-  // Use refs to hold the callbacks to avoid them being dependencies in useEffect
   const onScanSuccessRef = useRef(onScanSuccess);
   const onScanFailureRef = useRef(onScanFailure);
 
@@ -37,17 +43,19 @@ const QRCodeScannerComponent = ({ onScanSuccess, onScanFailure, active, setActiv
 
   // Main effect for scanner lifecycle
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (typeof window === 'undefined' || !active) {
         return;
     }
 
-    if (!html5QrCodeRef.current) {
-        html5QrCodeRef.current = new Html5Qrcode(scannerRegionId, { verbose: false });
-    }
-    const qrCode = html5QrCodeRef.current;
-
     const startScanner = async () => {
-        if (qrCode.getState() === Html5QrcodeScannerState.SCANNING) return;
+        const { Html5Qrcode } = await import('html5-qrcode');
+
+        if (!html5QrCodeRef.current) {
+            html5QrCodeRef.current = new Html5Qrcode(scannerRegionId, { verbose: false });
+        }
+        const qrCode = html5QrCodeRef.current;
+
+        if (qrCode && qrCode.getState() === 2 /* SCANNING */) return;
 
         try {
             const cameras = await Html5Qrcode.getCameras();
@@ -60,12 +68,12 @@ const QRCodeScannerComponent = ({ onScanSuccess, onScanFailure, active, setActiv
             await qrCode.start(
                 { facingMode: "environment" },
                 config,
-                (decodedText, decodedResult) => {
-                    onScanSuccessRef.current(decodedText, decodedResult);
+                (decodedText: string, decodedResult: Html5QrcodeResult) => {
+                    onScanSuccessRef.current(decodedText);
                     setActive(false);
                 },
-                (errorMessage, error) => {
-                    if (onScanFailureRef.current && error) onScanFailureRef.current(error as Html5QrcodeError);
+                (errorMessage: string, error: any) => {
+                    if (onScanFailureRef.current && error) onScanFailureRef.current(error);
                 }
             );
         } catch (err: any) {
@@ -80,24 +88,16 @@ const QRCodeScannerComponent = ({ onScanSuccess, onScanFailure, active, setActiv
             setActive(false);
         }
     };
-
-    const stopScanner = () => {
-        if (qrCode && qrCode.getState() === Html5QrcodeScannerState.SCANNING) {
-            qrCode.stop().catch(err => console.error("Failed to stop scanner cleanly:", err));
-        }
-    };
     
-    if (active) {
-        startScanner();
-    } else {
-        stopScanner();
-    }
+    startScanner();
 
     // Cleanup function
     return () => {
-        stopScanner();
+      if (html5QrCodeRef.current && html5QrCodeRef.current.getState() === 2 /* SCANNING */) {
+        html5QrCodeRef.current.stop().catch((err: any) => console.error("Failed to stop scanner cleanly:", err));
+      }
     };
-  }, [active, scannerRegionId, setActive, toast]);
+  }, [active, setActive, toast]);
 
   const toggleScanner = () => {
     setActive(!active);

@@ -1,6 +1,6 @@
 // src/components/charts/TopCategoriesChart.tsx
 "use client"
-
+import React from 'react';
 import type { ProductCategorySalesData } from "@/types";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -22,7 +22,7 @@ const BUSINESS_COLORS = [
   "#65a30d", // Lime
 ]; 
 
-export function TopCategoriesChart({ data }: TopCategoriesChartProps) {
+function TopCategoriesChartComponent({ data }: TopCategoriesChartProps) {
    if (!data || data.length === 0) {
     return (
       <Card className="transition-all duration-200 hover:shadow-md">
@@ -156,3 +156,5 @@ export function TopCategoriesChart({ data }: TopCategoriesChartProps) {
     </Card>
   );
 }
+
+export const TopCategoriesChart = React.memo(TopCategoriesChartComponent);

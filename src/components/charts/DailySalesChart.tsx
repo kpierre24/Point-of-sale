@@ -1,6 +1,6 @@
 // src/components/charts/DailySalesChart.tsx
 "use client"
-
+import React from 'react';
 import type { DailySalesData } from "@/types";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip as RechartsTooltip } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -26,7 +26,7 @@ const formatCurrencyForAxis = (value: number) => {
   return `$${value}`;
 };
 
-export function DailySalesChart({ data }: DailySalesChartProps) {
+function DailySalesChartComponent({ data }: DailySalesChartProps) {
   if (!data || data.length === 0) {
     return (
       <Card className="transition-all duration-200 hover:shadow-md">
@@ -137,3 +137,5 @@ export function DailySalesChart({ data }: DailySalesChartProps) {
     </Card>
   );
 }
+
+export const DailySalesChart = React.memo(DailySalesChartComponent);

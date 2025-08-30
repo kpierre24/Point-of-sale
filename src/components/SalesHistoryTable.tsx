@@ -1,7 +1,6 @@
 // src/components/SalesHistoryTable.tsx
 "use client";
-
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import type { Sale } from "@/types";
 import {
   Table,
@@ -32,7 +31,7 @@ interface SalesHistoryTableProps {
   soldItems: Sale[];
 }
 
-export function SalesHistoryTable({ soldItems }: SalesHistoryTableProps) {
+function SalesHistoryTableComponent({ soldItems }: SalesHistoryTableProps) {
   const [sortField, setSortField] = useState<SortField>('timestamp');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const { toast } = useToast();
@@ -279,3 +278,5 @@ export function SalesHistoryTable({ soldItems }: SalesHistoryTableProps) {
     </div>
   );
 }
+
+export const SalesHistoryTable = React.memo(SalesHistoryTableComponent);

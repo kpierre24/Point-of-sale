@@ -1,6 +1,8 @@
+// src/app/analytics/page.tsx
 "use client"
 
 import * as React from "react"
+import dynamic from "next/dynamic"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -27,13 +29,16 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { DatePickerWithRange } from "@/components/ui/date-range-picker"
-import { PredictiveAnalyticsChart } from "@/components/analytics/predictive-analytics-chart"
-import { CustomerSegmentationChart } from "@/components/analytics/customer-segmentation-chart"
-import { ProfitMarginAnalysis } from "@/components/analytics/profit-margin-analysis"
-import { SalesForecastChart } from "@/components/analytics/sales-forecast-chart"
 import { useNotifications } from "@/hooks/use-notifications"
 import { ProtectedComponent, PERMISSIONS } from "@/hooks/use-permissions"
 import { addDays, subDays, format } from "date-fns"
+
+// Dynamically import heavy chart components
+const PredictiveAnalyticsChart = dynamic(() => import('@/components/analytics/predictive-analytics-chart').then(mod => mod.PredictiveAnalyticsChart), { ssr: false, loading: () => <p>Loading chart...</p> })
+const CustomerSegmentationChart = dynamic(() => import('@/components/analytics/customer-segmentation-chart').then(mod => mod.CustomerSegmentationChart), { ssr: false, loading: () => <p>Loading chart...</p> })
+const ProfitMarginAnalysis = dynamic(() => import('@/components/analytics/profit-margin-analysis').then(mod => mod.ProfitMarginAnalysis), { ssr: false, loading: () => <p>Loading chart...</p> })
+const SalesForecastChart = dynamic(() => import('@/components/analytics/sales-forecast-chart').then(mod => mod.SalesForecastChart), { ssr: false, loading: () => <p>Loading chart...</p> })
+
 
 // Mock analytics data - in a real app, this would come from your analytics service
 const mockAnalyticsData = {
