@@ -1,3 +1,4 @@
+
 // src/app/products/page.tsx
 "use client";
 
@@ -343,8 +344,7 @@ export default function ProductsPage() {
   return (
     <div className="space-y-8">
       {/* Responsive Header */}
-      <header className="mb-8">
-        <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Product Management</h1>
               <p className="text-muted-foreground text-sm sm:text-md">
@@ -365,7 +365,6 @@ export default function ProductsPage() {
               </Button>
             </ProtectedComponent>
           </div>
-        </div>
       </header>
 
       <ProductForm
