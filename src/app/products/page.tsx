@@ -435,10 +435,10 @@ export default function ProductsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="h-[500px] rounded-md border shadow-inner">
+          <div className="relative w-full overflow-auto">
             <Table>
               {filteredProducts.length === 0 && <TableCaption>No products match your search criteria.</TableCaption>}
-              <TableHeader className="sticky top-0 bg-card z-10">
+              <TableHeader>
                 <TableRow>
                   <TableHead className="w-[50px]">
                     <Checkbox
@@ -450,8 +450,8 @@ export default function ProductsPage() {
                   <TableHead className="w-[80px]">Image</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead className="text-right">Cost Price</TableHead>
-                  <TableHead className="text-right">Selling Price</TableHead>
+                  <TableHead className="text-right hidden sm:table-cell">Cost Price</TableHead>
+                  <TableHead className="text-right hidden sm:table-cell">Selling Price</TableHead>
                   <TableHead className="text-left">{selectedLocationId ? 'Stock Status' : 'Total Stock Status'}</TableHead>
                   <TableHead className="text-center w-[120px]">Actions</TableHead>
                 </TableRow>
@@ -488,8 +488,8 @@ export default function ProductsPage() {
                           showIcon={true}
                         />
                       </TableCell>
-                      <TableCell className="text-right">{formatCurrency(product.costOfGoodsSold)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(product.price)}</TableCell>
+                      <TableCell className="text-right hidden sm:table-cell">{formatCurrency(product.costOfGoodsSold)}</TableCell>
+                      <TableCell className="text-right hidden sm:table-cell">{formatCurrency(product.price)}</TableCell>
                       <TableCell className="text-left">
                         <CompactStockIndicator
                           stockLevel={stockLevel}
@@ -532,7 +532,7 @@ export default function ProductsPage() {
                 })}
               </TableBody>
             </Table>
-          </ScrollArea>
+          </div>
         </CardContent>
       </Card>
     </div>
